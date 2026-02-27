@@ -537,6 +537,7 @@ export default function FrogRunner() {
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
+      if ((e.target as HTMLElement).closest?.('[data-ui-button="mute"]')) return;
       e.preventDefault();
       jump();
     },
@@ -555,8 +556,11 @@ export default function FrogRunner() {
 
       {/* Mute button */}
       <button
-        onClick={(e) => { e.stopPropagation(); toggleMute(); }}
-        className="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-full bg-black/40 text-white text-xl backdrop-blur-sm hover:bg-black/60 transition-colors"
+        data-ui-button="mute"
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleMute(); }}
+        onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        className="absolute right-3 z-20 w-10 h-10 flex items-center justify-center rounded-full bg-black/40 text-white text-xl backdrop-blur-sm hover:bg-black/60 transition-colors"
+        style={{ top: 'calc(env(safe-area-inset-top, 0px) + 60px)' }}
         aria-label={muted ? "Unmute" : "Mute"}
       >
         {muted ? "🔇" : "🔊"}
