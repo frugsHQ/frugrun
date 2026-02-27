@@ -42,6 +42,17 @@ function initParallaxLines(w: number, h: number): ParallaxLine[] {
   return lines;
 }
 
+// ── Dust particle ──────────────────────────────────────────
+interface DustParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  size: number;
+}
+
 // ── Types ──────────────────────────────────────────────────
 interface Obstacle {
   x: number;
@@ -146,11 +157,15 @@ export default function FrogRunner() {
   const spriteLoadedRef = useRef(false);
   const parallaxRef = useRef<ParallaxLine[]>([]);
 
+  const dustRef = useRef<DustParticle[]>([]);
+
   const stateRef = useRef<{
     gameState: GameState;
     frogY: number;
     frogVY: number;
     onGround: boolean;
+    wasOnGround: boolean;
+    squashTimer: number;
     obstacles: Obstacle[];
     score: number;
     bestScore: number;
@@ -166,6 +181,8 @@ export default function FrogRunner() {
     frogY: 0,
     frogVY: 0,
     onGround: true,
+    wasOnGround: true,
+    squashTimer: 0,
     obstacles: [],
     score: 0,
     bestScore: parseInt(localStorage.getItem("frogBest") || "0", 10),
@@ -232,10 +249,39 @@ export default function FrogRunner() {
     // ── Update frog ──
     s.frogVY += GRAVITY * scale * dt;
     s.frogY += s.frogVY * scale * dt;
+    const justLanded = !s.onGround;
     if (s.frogY >= groundY - frogH) {
       s.frogY = groundY - frogH;
       s.frogVY = 0;
       s.onGround = true;
+      if (justLanded && !s.wasOnGround) {
+        // Spawn dust particles on landing
+        s.squashTimer = 100;
+        const footY = groundY;
+        const footX = frogX + frogW / 2;
+        for (let i = 0; i < 6; i++) {
+          dustRef.current.push({
+            x: footX + (Math.random() - 0.5) * frogW * 0.6,
+            y: footY - Math.random() * 4,
+            vx: (Math.random() - 0.5) * 0.15 * scale,
+            vy: -Math.random() * 0.05 * scale,
+            life: 300 + Math.random() * 200,
+            maxLife: 300 + Math.random() * 200,
+            size: 2 + Math.random() * 3,
+          });
+        }
+      }
+    }
+    s.wasOnGround = s.onGround;
+    if (s.squashTimer > 0) s.squashTimer = Math.max(0, s.squashTimer - dt);
+
+    // ── Update dust particles ──
+    for (let i = dustRef.current.length - 1; i >= 0; i--) {
+      const p = dustRef.current[i];
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life -= dt;
+      if (p.life <= 0) dustRef.current.splice(i, 1);
     }
 
     // ── Obstacle speed & spawning ──
@@ -299,11 +345,58 @@ export default function FrogRunner() {
       drawObstacle(ctx, ob.x, groundY, ob.w, ob.h);
     }
 
-    // ── Draw frog (sprite or fallback) ──
+    // ── Ground shadow ──
+    const airHeight = groundY - frogH - s.frogY;
+    const maxAir = groundY - frogH;
+    const shadowScale = Math.max(0.4, 1 - (airHeight / maxAir) * 0.6);
+    ctx.save();
+    ctx.globalAlpha = 0.2 * shadowScale;
+    ctx.fillStyle = "#000";
+    ctx.beginPath();
+    ctx.ellipse(frogX + frogW / 2, groundY + 2, (frogW / 2) * shadowScale, 4 * shadowScale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // ── Squash & stretch + tilt ──
+    let scaleX = 1;
+    let scaleY = 1;
+    let rotation = 0;
+    if (!s.onGround) {
+      // In air: stretch vertically
+      scaleX = 0.93;
+      scaleY = 1.08;
+      rotation = s.frogVY < 0 ? -0.087 : 0.087; // ~5 degrees
+    } else if (s.squashTimer > 0) {
+      // Landing squash
+      const t = s.squashTimer / 100;
+      scaleX = 1 + 0.1 * t;
+      scaleY = 1 - 0.08 * t;
+    }
+
+    const drawW = frogW * scaleX;
+    const drawH = frogH * scaleY;
+    const drawX = frogX + (frogW - drawW) / 2;
+    const drawY = s.frogY + frogH - drawH; // anchor to feet
+
+    ctx.save();
+    ctx.translate(drawX + drawW / 2, drawY + drawH / 2);
+    ctx.rotate(rotation);
     if (spriteLoadedRef.current && spriteRef.current) {
-      ctx.drawImage(spriteRef.current, frogX, s.frogY, frogW, frogH);
+      ctx.drawImage(spriteRef.current, -drawW / 2, -drawH / 2, drawW, drawH);
     } else {
-      drawFrogFallback(ctx, frogX, s.frogY, frogW, frogH);
+      drawFrogFallback(ctx, -drawW / 2, -drawH / 2, drawW, drawH);
+    }
+    ctx.restore();
+
+    // ── Dust particles ──
+    for (const p of dustRef.current) {
+      ctx.save();
+      ctx.globalAlpha = (p.life / p.maxLife) * 0.4;
+      ctx.fillStyle = "#c8b897";
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     }
 
     // Score HUD
@@ -330,7 +423,10 @@ export default function FrogRunner() {
     s.frogY = groundY - frogH;
     s.frogVY = 0;
     s.onGround = true;
+    s.wasOnGround = true;
+    s.squashTimer = 0;
     s.obstacles = [];
+    dustRef.current = [];
     s.score = 0;
     s.elapsed = 0;
     s.spawnTimer = 0;
