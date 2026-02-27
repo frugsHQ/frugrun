@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback, useState } from "react";
 import frugSprite from "@/assets/frug-sprite.png";
+import bgMusicSrc from "@/assets/bg-music.mp3";
 
 // ── Constants ──────────────────────────────────────────────
 const GROUND_RATIO = 0.82;
@@ -158,6 +159,66 @@ export default function FrogRunner() {
   const parallaxRef = useRef<ParallaxLine[]>([]);
 
   const dustRef = useRef<DustParticle[]>([]);
+
+  // ── Audio refs ──
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const fadeRef = useRef<number>(0);
+  const [muted, setMuted] = useState(() => localStorage.getItem("frogMuted") === "1");
+
+  useEffect(() => {
+    const audio = new Audio(bgMusicSrc);
+    audio.loop = true;
+    audio.volume = 0;
+    audioRef.current = audio;
+    return () => { audio.pause(); audio.src = ""; };
+  }, []);
+
+  const fadeAudioIn = useCallback(() => {
+    cancelAnimationFrame(fadeRef.current);
+    const audio = audioRef.current;
+    if (!audio || muted) return;
+    audio.volume = 0;
+    audio.play().catch(() => {});
+    const start = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min((now - start) / 1000, 1);
+      audio.volume = t * 0.4;
+      if (t < 1) fadeRef.current = requestAnimationFrame(tick);
+    };
+    fadeRef.current = requestAnimationFrame(tick);
+  }, [muted]);
+
+  const fadeAudioOut = useCallback(() => {
+    cancelAnimationFrame(fadeRef.current);
+    const audio = audioRef.current;
+    if (!audio) return;
+    const startVol = audio.volume;
+    if (startVol === 0) { audio.pause(); return; }
+    const start = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min((now - start) / 1000, 1);
+      audio.volume = startVol * (1 - t);
+      if (t < 1) fadeRef.current = requestAnimationFrame(tick);
+      else audio.pause();
+    };
+    fadeRef.current = requestAnimationFrame(tick);
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    setMuted(prev => {
+      const next = !prev;
+      localStorage.setItem("frogMuted", next ? "1" : "0");
+      const audio = audioRef.current;
+      if (audio) {
+        if (next) { audio.pause(); }
+        else if (stateRef.current.gameState === "playing") {
+          audio.volume = 0.4;
+          audio.play().catch(() => {});
+        }
+      }
+      return next;
+    });
+  }, []);
 
   const stateRef = useRef<{
     gameState: GameState;
@@ -327,6 +388,7 @@ export default function FrogRunner() {
           s.bestScore = s.score;
           localStorage.setItem("frogBest", String(s.bestScore));
         }
+        fadeAudioOut();
         setOverlay("over");
         setDisplayScore(s.score);
         setDisplayBest(s.bestScore);
@@ -409,7 +471,7 @@ export default function FrogRunner() {
     ctx.fillText(`Best: ${s.bestScore}`, W - 14, fontSize + 10);
 
     s.animId = requestAnimationFrame(loop);
-  }, []);
+  }, [fadeAudioOut]);
 
   // ── Start / Restart ──
   const startGame = useCallback(() => {
@@ -434,9 +496,10 @@ export default function FrogRunner() {
     s.lastTime = 0;
     parallaxRef.current = initParallaxLines(s.canvasW, s.canvasH);
     setOverlay("playing");
+    fadeAudioIn();
     cancelAnimationFrame(s.animId);
     s.animId = requestAnimationFrame(loop);
-  }, [loop]);
+  }, [loop, fadeAudioIn]);
 
   // ── Jump ──
   const jump = useCallback(() => {
@@ -489,6 +552,15 @@ export default function FrogRunner() {
         style={{ touchAction: "none" }}
         onPointerDown={handlePointerDown}
       />
+
+      {/* Mute button */}
+      <button
+        onClick={(e) => { e.stopPropagation(); toggleMute(); }}
+        className="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-full bg-black/40 text-white text-xl backdrop-blur-sm hover:bg-black/60 transition-colors"
+        aria-label={muted ? "Unmute" : "Mute"}
+      >
+        {muted ? "🔇" : "🔊"}
+      </button>
 
       {overlay === "start" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 z-10">
