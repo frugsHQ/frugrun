@@ -163,7 +163,8 @@ export default function FrogRunner() {
   // ── Audio refs ──
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fadeRef = useRef<number>(0);
-  const [muted, setMuted] = useState(() => localStorage.getItem("frogMuted") === "1");
+  const mutedRef = useRef(localStorage.getItem("frogMuted") === "1");
+  const [muted, setMuted] = useState(mutedRef.current);
 
   useEffect(() => {
     const audio = new Audio(bgMusicSrc);
@@ -176,7 +177,7 @@ export default function FrogRunner() {
   const fadeAudioIn = useCallback(() => {
     cancelAnimationFrame(fadeRef.current);
     const audio = audioRef.current;
-    if (!audio || muted) return;
+    if (!audio || mutedRef.current) return;
     audio.volume = 0;
     audio.play().catch(() => {});
     const start = performance.now();
@@ -186,7 +187,7 @@ export default function FrogRunner() {
       if (t < 1) fadeRef.current = requestAnimationFrame(tick);
     };
     fadeRef.current = requestAnimationFrame(tick);
-  }, [muted]);
+  }, []);
 
   const fadeAudioOut = useCallback(() => {
     cancelAnimationFrame(fadeRef.current);
@@ -205,19 +206,18 @@ export default function FrogRunner() {
   }, []);
 
   const toggleMute = useCallback(() => {
-    setMuted(prev => {
-      const next = !prev;
-      localStorage.setItem("frogMuted", next ? "1" : "0");
-      const audio = audioRef.current;
-      if (audio) {
-        if (next) { audio.pause(); }
-        else if (stateRef.current.gameState === "playing") {
-          audio.volume = 0.4;
-          audio.play().catch(() => {});
-        }
+    const next = !mutedRef.current;
+    mutedRef.current = next;
+    localStorage.setItem("frogMuted", next ? "1" : "0");
+    const audio = audioRef.current;
+    if (audio) {
+      if (next) { audio.pause(); }
+      else if (stateRef.current.gameState === "playing") {
+        audio.volume = 0.4;
+        audio.play().catch(() => {});
       }
-      return next;
-    });
+    }
+    setMuted(next);
   }, []);
 
   const stateRef = useRef<{
