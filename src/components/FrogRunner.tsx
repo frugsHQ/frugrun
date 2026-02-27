@@ -1,16 +1,46 @@
 import { useRef, useEffect, useCallback, useState } from "react";
+import frugSprite from "@/assets/frug-sprite.png";
 
 // ── Constants ──────────────────────────────────────────────
-const GROUND_RATIO = 0.82; // ground line at 82% of canvas height
-const FROG_W_RATIO = 0.07; // frog width relative to canvas width
-const FROG_ASPECT = 1.1;   // height/width
-const GRAVITY = 0.0018;    // pixels/ms² (scaled later)
-const JUMP_VEL = -0.85;    // initial jump velocity (scaled)
-const BASE_OBS_SPEED = 0.35; // pixels/ms base obstacle speed (scaled)
+const GROUND_RATIO = 0.82;
+const FROG_W_RATIO = 0.07;
+const FROG_ASPECT = 1.1;
+const GRAVITY = 0.0018;
+const JUMP_VEL = -0.85;
+const BASE_OBS_SPEED = 0.35;
 const MIN_SPAWN = 700;
 const MAX_SPAWN = 1600;
-const SPEED_INCREASE = 0.00002; // speed increase per ms
-const SPAWN_DECREASE = 0.005;   // spawn interval decrease per ms
+const SPEED_INCREASE = 0.00002;
+const SPAWN_DECREASE = 0.005;
+
+// ── Parallax config ────────────────────────────────────────
+const PARALLAX_LAYERS = [
+  { count: 25, speedFactor: 0.08, yMin: 0.15, yMax: 0.55, alpha: 0.08, lenMin: 30, lenMax: 80 },
+  { count: 20, speedFactor: 0.15, yMin: 0.25, yMax: 0.65, alpha: 0.12, lenMin: 20, lenMax: 60 },
+  { count: 15, speedFactor: 0.25, yMin: 0.35, yMax: 0.75, alpha: 0.18, lenMin: 15, lenMax: 45 },
+];
+
+interface ParallaxLine {
+  x: number;
+  y: number;
+  len: number;
+  layer: number;
+}
+
+function initParallaxLines(w: number, h: number): ParallaxLine[] {
+  const lines: ParallaxLine[] = [];
+  PARALLAX_LAYERS.forEach((cfg, layer) => {
+    for (let i = 0; i < cfg.count; i++) {
+      lines.push({
+        x: Math.random() * (w + 200),
+        y: h * cfg.yMin + Math.random() * h * (cfg.yMax - cfg.yMin),
+        len: cfg.lenMin + Math.random() * (cfg.lenMax - cfg.lenMin),
+        layer,
+      });
+    }
+  });
+  return lines;
+}
 
 // ── Types ──────────────────────────────────────────────────
 interface Obstacle {
@@ -22,17 +52,16 @@ interface Obstacle {
 type GameState = "start" | "playing" | "over";
 
 // ── Drawing helpers ────────────────────────────────────────
-function drawFrog(
+function drawFrogFallback(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   w: number,
   h: number
 ) {
-  const r = w * 0.3;
-  // Body
   ctx.fillStyle = "#3cb043";
   ctx.beginPath();
+  const r = w * 0.3;
   ctx.moveTo(x + r, y);
   ctx.lineTo(x + w - r, y);
   ctx.quadraticCurveTo(x + w, y, x + w, y + r);
@@ -43,26 +72,6 @@ function drawFrog(
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.fill();
-
-  // Belly
-  ctx.fillStyle = "#7ed957";
-  ctx.beginPath();
-  ctx.ellipse(x + w * 0.5, y + h * 0.6, w * 0.3, h * 0.25, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Eyes
-  const eyeR = w * 0.16;
-  const eyeY = y + h * 0.22;
-  [x + w * 0.3, x + w * 0.7].forEach((ex) => {
-    ctx.fillStyle = "#fff";
-    ctx.beginPath();
-    ctx.arc(ex, eyeY, eyeR, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#1a1a1a";
-    ctx.beginPath();
-    ctx.arc(ex + eyeR * 0.25, eyeY, eyeR * 0.5, 0, Math.PI * 2);
-    ctx.fill();
-  });
 }
 
 function drawObstacle(
@@ -74,7 +83,6 @@ function drawObstacle(
 ) {
   ctx.fillStyle = "#8B4513";
   ctx.fillRect(x, groundY - h, w, h);
-  // top spike
   ctx.fillStyle = "#654321";
   ctx.beginPath();
   ctx.moveTo(x, groundY - h);
@@ -84,10 +92,8 @@ function drawObstacle(
 }
 
 function drawGround(ctx: CanvasRenderingContext2D, w: number, groundY: number, h: number) {
-  // Ground fill
   ctx.fillStyle = "#5a3e1b";
   ctx.fillRect(0, groundY, w, h - groundY);
-  // Grass line
   ctx.fillStyle = "#4a7c24";
   ctx.fillRect(0, groundY - 3, w, 6);
 }
@@ -111,9 +117,35 @@ function drawClouds(ctx: CanvasRenderingContext2D, w: number, time: number) {
   }
 }
 
+function drawParallax(
+  ctx: CanvasRenderingContext2D,
+  lines: ParallaxLine[],
+  speed: number,
+  dt: number,
+  w: number
+) {
+  for (const line of lines) {
+    const cfg = PARALLAX_LAYERS[line.layer];
+    line.x -= speed * cfg.speedFactor * dt;
+    if (line.x + line.len < 0) {
+      line.x = w + Math.random() * 100;
+    }
+    ctx.strokeStyle = `rgba(255,255,255,${cfg.alpha})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(line.x, line.y);
+    ctx.lineTo(line.x + line.len, line.y);
+    ctx.stroke();
+  }
+}
+
 // ── Component ──────────────────────────────────────────────
 export default function FrogRunner() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const spriteRef = useRef<HTMLImageElement | null>(null);
+  const spriteLoadedRef = useRef(false);
+  const parallaxRef = useRef<ParallaxLine[]>([]);
+
   const stateRef = useRef<{
     gameState: GameState;
     frogY: number;
@@ -152,7 +184,17 @@ export default function FrogRunner() {
     parseInt(localStorage.getItem("frogBest") || "0", 10)
   );
 
-  // ── Resize canvas to fill viewport ──
+  // ── Load sprite once ──
+  useEffect(() => {
+    const img = new Image();
+    img.src = frugSprite;
+    img.onload = () => {
+      spriteLoadedRef.current = true;
+    };
+    spriteRef.current = img;
+  }, []);
+
+  // ── Resize canvas ──
   const resize = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -167,6 +209,7 @@ export default function FrogRunner() {
     ctx?.scale(dpr, dpr);
     stateRef.current.canvasW = w;
     stateRef.current.canvasH = h;
+    parallaxRef.current = initParallaxLines(w, h);
   }, []);
 
   // ── Game loop ──
@@ -184,7 +227,7 @@ export default function FrogRunner() {
     const frogW = W * FROG_W_RATIO;
     const frogH = frogW * FROG_ASPECT;
     const frogX = W * 0.1;
-    const scale = W / 400; // reference width for physics scaling
+    const scale = W / 400;
 
     // ── Update frog ──
     s.frogVY += GRAVITY * scale * dt;
@@ -201,10 +244,7 @@ export default function FrogRunner() {
     s.spawnTimer += dt;
     if (s.spawnTimer >= s.nextSpawn) {
       s.spawnTimer = 0;
-      const interval = Math.max(
-        MIN_SPAWN,
-        MAX_SPAWN - SPAWN_DECREASE * s.elapsed
-      );
+      const interval = Math.max(MIN_SPAWN, MAX_SPAWN - SPAWN_DECREASE * s.elapsed);
       s.nextSpawn = interval * (0.6 + Math.random() * 0.8);
       const ow = frogW * (0.5 + Math.random() * 0.5);
       const oh = frogH * (0.6 + Math.random() * 0.7);
@@ -220,12 +260,13 @@ export default function FrogRunner() {
       }
     }
 
-    // ── Collision (AABB) ──
+    // ── Collision (AABB) – hitbox slightly smaller than sprite ──
+    const hitboxShrink = 0.15;
     const frogBox = {
-      x: frogX + frogW * 0.1,
-      y: s.frogY + frogH * 0.1,
-      w: frogW * 0.8,
-      h: frogH * 0.8,
+      x: frogX + frogW * hitboxShrink,
+      y: s.frogY + frogH * hitboxShrink,
+      w: frogW * (1 - hitboxShrink * 2),
+      h: frogH * (1 - hitboxShrink * 2),
     };
     for (const ob of s.obstacles) {
       const obBox = { x: ob.x, y: groundY - ob.h, w: ob.w, h: ob.h };
@@ -235,7 +276,6 @@ export default function FrogRunner() {
         frogBox.y < obBox.y + obBox.h &&
         frogBox.y + frogBox.h > obBox.y
       ) {
-        // Game over
         s.gameState = "over";
         if (s.score > s.bestScore) {
           s.bestScore = s.score;
@@ -251,16 +291,20 @@ export default function FrogRunner() {
     // ── Draw ──
     ctx.clearRect(0, 0, W, H);
     drawSky(ctx, W, groundY);
+    drawParallax(ctx, parallaxRef.current, speed, dt, W);
     drawClouds(ctx, W, s.elapsed);
     drawGround(ctx, W, groundY, H);
 
-    // Obstacles
     for (const ob of s.obstacles) {
       drawObstacle(ctx, ob.x, groundY, ob.w, ob.h);
     }
 
-    // Frog
-    drawFrog(ctx, frogX, s.frogY, frogW, frogH);
+    // ── Draw frog (sprite or fallback) ──
+    if (spriteLoadedRef.current && spriteRef.current) {
+      ctx.drawImage(spriteRef.current, frogX, s.frogY, frogW, frogH);
+    } else {
+      drawFrogFallback(ctx, frogX, s.frogY, frogW, frogH);
+    }
 
     // Score HUD
     const fontSize = Math.max(16, W * 0.04);
@@ -292,6 +336,7 @@ export default function FrogRunner() {
     s.spawnTimer = 0;
     s.nextSpawn = 1200;
     s.lastTime = 0;
+    parallaxRef.current = initParallaxLines(s.canvasW, s.canvasH);
     setOverlay("playing");
     cancelAnimationFrame(s.animId);
     s.animId = requestAnimationFrame(loop);
@@ -349,12 +394,11 @@ export default function FrogRunner() {
         onPointerDown={handlePointerDown}
       />
 
-      {/* Start overlay */}
       {overlay === "start" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 z-10">
           <div className="text-center px-6">
             <h1 className="text-4xl sm:text-5xl font-extrabold text-white mb-2 drop-shadow-lg">
-              🐸 Frog Run
+              🐸 Frug Run
             </h1>
             <p className="text-lg text-white/80 mb-8">
               Tap anywhere or press Space to jump
@@ -369,7 +413,6 @@ export default function FrogRunner() {
         </div>
       )}
 
-      {/* Game Over overlay */}
       {overlay === "over" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 z-10">
           <div className="text-center px-6">
