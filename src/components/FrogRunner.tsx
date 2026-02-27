@@ -152,6 +152,57 @@ function drawParallax(
 }
 
 // ── Component ──────────────────────────────────────────────
+// ── SFX helpers (Web Audio API) ────────────────────────────
+let sfxCtx: AudioContext | null = null;
+function getSfxCtx() {
+  if (!sfxCtx) sfxCtx = new AudioContext();
+  return sfxCtx;
+}
+
+function playSfxJump(mutedFlag: { current: boolean }) {
+  if (mutedFlag.current) return;
+  const ctx = getSfxCtx();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(400, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.15);
+  gain.gain.setValueAtTime(0.15, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(); osc.stop(ctx.currentTime + 0.2);
+}
+
+function playSfxScore(mutedFlag: { current: boolean }) {
+  if (mutedFlag.current) return;
+  const ctx = getSfxCtx();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(600, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
+  gain.gain.setValueAtTime(0.12, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(); osc.stop(ctx.currentTime + 0.15);
+}
+
+function playSfxGameOver(mutedFlag: { current: boolean }) {
+  if (mutedFlag.current) return;
+  const ctx = getSfxCtx();
+  [200, 150, 100].forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "square";
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.1, ctx.currentTime + i * 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.12 + 0.15);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(ctx.currentTime + i * 0.12);
+    osc.stop(ctx.currentTime + i * 0.12 + 0.15);
+  });
+}
+
 export default function FrogRunner() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const spriteRef = useRef<HTMLImageElement | null>(null);
@@ -364,6 +415,7 @@ export default function FrogRunner() {
       if (s.obstacles[i].x + s.obstacles[i].w < 0) {
         s.obstacles.splice(i, 1);
         s.score++;
+        playSfxScore(mutedRef);
       }
     }
 
@@ -384,6 +436,7 @@ export default function FrogRunner() {
         frogBox.y + frogBox.h > obBox.y
       ) {
         s.gameState = "over";
+        playSfxGameOver(mutedRef);
         if (s.score > s.bestScore) {
           s.bestScore = s.score;
           localStorage.setItem("frogBest", String(s.bestScore));
@@ -513,6 +566,7 @@ export default function FrogRunner() {
     const scale = s.canvasW / 400;
     s.frogVY = JUMP_VEL * scale;
     s.onGround = false;
+    playSfxJump(mutedRef);
   }, [startGame]);
 
   // ── Input handlers ──
