@@ -3,7 +3,7 @@ import frugSprite from "@/assets/frug-sprite.png";
 
 // ── Constants ──────────────────────────────────────────────
 const GROUND_RATIO = 0.82;
-const FROG_W_RATIO = 0.07;
+const FROG_W_RATIO = 0.14;
 const FROG_ASPECT = 1.1;
 const GRAVITY = 0.0018;
 const JUMP_VEL = -0.85;
