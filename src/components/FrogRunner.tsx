@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback, useState } from "react";
-import frugSprite from "@/assets/frug-sprite.png";
+import frugFrame1 from "@/assets/frug-frame1.png";
+import frugFrame2 from "@/assets/frug-frame2.png";
 import bgMusicSrc from "@/assets/bg-music.mp3";
 
 // ── Modular imports ────────────────────────────────────────
