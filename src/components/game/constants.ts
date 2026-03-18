@@ -42,7 +42,7 @@ export const SCORING = {
 
 // ── Milestone messages (triggered at score thresholds) ─────
 export const MILESTONES = [
-  { score: 50, text: "🏃 Getting started!" },
+  { score: 50, text: "🏃 Run, Frug, Run!" },
   { score: 150, text: "⚡ Speed increasing!" },
   { score: 300, text: "🔥 You're on a roll!" },
   { score: 500, text: "💪 Watch out!" },
