@@ -1,4 +1,5 @@
 // ── Game Types ─────────────────────────────────────────────
+import type { ObstacleKind } from "./constants";
 
 /** A single parallax background line */
 export interface ParallaxLine {
@@ -24,18 +25,8 @@ export interface Obstacle {
   x: number;
   w: number;
   h: number;
+  kind: ObstacleKind;
 }
 
-/** All possible screen states */
-export type GameState = "start" | "levelStart" | "playing" | "levelComplete" | "over" | "victory";
-
-/** Definition for a single level */
-export interface LevelDef {
-  level: number;
-  title: string;
-  subtitle: string;
-  targetScore: number;
-  baseSpeed: number;
-  minSpawn: number;
-  maxSpawn: number;
-}
+/** All possible screen states (simplified for endless mode) */
+export type GameState = "start" | "playing" | "over";

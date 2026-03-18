@@ -1,13 +1,9 @@
-import type { LevelDef } from "./types";
-
 // ── Core gameplay constants ────────────────────────────────
 export const GROUND_RATIO = 0.82;
 export const FROG_W_RATIO = 0.14;
 export const FROG_ASPECT = 1.1;
 export const GRAVITY = 0.0018;
 export const JUMP_VEL = -0.85;
-export const SPEED_INCREASE = 0.00002;
-export const SPAWN_DECREASE = 0.005;
 
 // ── Parallax background layers ─────────────────────────────
 export const PARALLAX_LAYERS = [
@@ -16,52 +12,26 @@ export const PARALLAX_LAYERS = [
   { count: 15, speedFactor: 0.25, yMin: 0.35, yMax: 0.75, alpha: 0.18, lenMin: 15, lenMax: 45 },
 ];
 
-// ── Level definitions (5 levels) ───────────────────────────
-// Each level gets harder: faster obstacles, shorter spawn gaps, more to clear.
-export const LEVELS: LevelDef[] = [
-  {
-    level: 1,
-    title: "Green Meadow",
-    subtitle: "A gentle start — get the hang of jumping!",
-    targetScore: 5,
-    baseSpeed: 0.30,
-    minSpawn: 900,
-    maxSpawn: 1800,
-  },
-  {
-    level: 2,
-    title: "Rocky Path",
-    subtitle: "Things are picking up speed…",
-    targetScore: 8,
-    baseSpeed: 0.35,
-    minSpawn: 750,
-    maxSpawn: 1600,
-  },
-  {
-    level: 3,
-    title: "Dense Forest",
-    subtitle: "Obstacles come thick and fast!",
-    targetScore: 12,
-    baseSpeed: 0.40,
-    minSpawn: 600,
-    maxSpawn: 1400,
-  },
-  {
-    level: 4,
-    title: "Mountain Pass",
-    subtitle: "Only the bold survive up here.",
-    targetScore: 15,
-    baseSpeed: 0.45,
-    minSpawn: 500,
-    maxSpawn: 1200,
-  },
-  {
-    level: 5,
-    title: "The Summit",
-    subtitle: "Final challenge — give it everything!",
-    targetScore: 20,
-    baseSpeed: 0.50,
-    minSpawn: 400,
-    maxSpawn: 1000,
-  },
-];
+// ── Endless-mode difficulty ramp config ────────────────────
+// All difficulty values in one place for easy tweaking.
+export const DIFFICULTY = {
+  // Starting values
+  startSpeed: 0.28,       // initial obstacle speed multiplier
+  startMinSpawn: 1000,    // initial min ms between spawns
+  startMaxSpawn: 1900,    // initial max ms between spawns
+
+  // Maximum difficulty caps
+  maxSpeed: 0.60,         // fastest obstacle speed
+  minMinSpawn: 350,       // fastest possible spawn interval
+  minMaxSpawn: 700,       // cap for the max-spawn interval
+
+  // How fast difficulty ramps (per ms of elapsed time)
+  speedRamp: 0.000015,    // speed increase per ms
+  spawnRamp: 0.008,       // spawn interval decrease per ms (applied to both min & max)
+
+  // Time (ms) at which difficulty is fully capped (~2.5 min)
+  capTime: 150_000,
+} as const;
+
+// ── Obstacle types ─────────────────────────────────────────
+export type ObstacleKind = "rock" | "snake";
