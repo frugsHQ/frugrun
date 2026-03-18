@@ -5,7 +5,7 @@ import bgMusicSrc from "@/assets/bg-music.mp3";
 
 // ── Modular imports ────────────────────────────────────────
 import {
-  GROUND_RATIO, FROG_W_RATIO, FROG_ASPECT,
+  GROUND_RATIO, FROG_W_RATIO, FROG_ASPECT, FROG_Y_OFFSET,
   GRAVITY, JUMP_VEL, DIFFICULTY, SCORING, MILESTONES,
 } from "./game/constants";
 import type { ObstacleKind } from "./game/constants";
