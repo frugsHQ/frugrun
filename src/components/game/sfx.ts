@@ -56,20 +56,3 @@ export function playSfxGameOver(m: MuteFlag) {
     osc.stop(ctx.currentTime + i * 0.12 + 0.15);
   });
 }
-
-/** Ascending fanfare for level complete */
-export function playSfxLevelComplete(m: MuteFlag) {
-  if (m.current) return;
-  const ctx = getSfxCtx();
-  [523, 659, 784, 1047].forEach((freq, i) => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0.12, ctx.currentTime + i * 0.1);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.1 + 0.2);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(ctx.currentTime + i * 0.1);
-    osc.stop(ctx.currentTime + i * 0.1 + 0.2);
-  });
-}
