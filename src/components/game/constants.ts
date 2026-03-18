@@ -44,7 +44,7 @@ export const SCORING = {
 export const MILESTONES = [
   { score: 50, text: "🏃 Run, Frug, Run!" },
   { score: 150, text: "⚡ Speed increasing!" },
-  { score: 300, text: "🔥 You're on a roll!" },
+  { score: 300, text: "🔥 What the Frug! You got this!" },
   { score: 500, text: "💪 Watch out!" },
   { score: 800, text: "🌟 Incredible!" },
   { score: 1200, text: "👑 Unstoppable!" },

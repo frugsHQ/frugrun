@@ -18,12 +18,38 @@ export function StartOverlay({
   onStart: () => void;
   onLeaderboard: () => void;
 }) {
+  const [topEntry, setTopEntry] = useState<{ player_name: string; score: number } | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  // Fetch the #1 score on mount
+  useEffect(() => {
+    fetchLeaderboard().then((entries) => {
+      if (entries.length > 0) setTopEntry(entries[0]);
+      setLoaded(true);
+    });
+  }, []);
+
   return (
     <Overlay>
       <h1 className="text-4xl sm:text-5xl font-extrabold text-white mb-2 drop-shadow-lg">
         🐸 Frug Run
       </h1>
-      <p className="text-lg text-white/80 mb-8">Tap anywhere or press Space to jump</p>
+      <p className="text-lg text-white/80 mb-4">Tap anywhere or press Space to jump</p>
+
+      {/* Best score from leaderboard */}
+      {loaded && (
+        <div className="mb-6 text-white/70 text-sm">
+          {topEntry ? (
+            <>
+              <p className="text-base font-bold text-white/90">🏆 Best Score: {topEntry.score.toLocaleString()}</p>
+              <p>By: {topEntry.player_name}</p>
+            </>
+          ) : (
+            <p>No high score yet</p>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-col gap-3 items-center">
         <button
           onClick={onStart}
