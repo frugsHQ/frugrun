@@ -28,5 +28,12 @@ export interface Obstacle {
   kind: ObstacleKind;
 }
 
-/** All possible screen states (simplified for endless mode) */
-export type GameState = "start" | "playing" | "over";
+/** All possible screen states */
+export type GameState = "start" | "playing" | "over" | "leaderboard";
+
+/** A milestone message shown briefly on screen */
+export interface MilestoneMsg {
+  text: string;
+  life: number;   // ms remaining
+  maxLife: number;
+}

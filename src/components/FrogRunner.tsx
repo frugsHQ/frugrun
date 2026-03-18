@@ -5,13 +5,13 @@ import bgMusicSrc from "@/assets/bg-music.mp3";
 // ── Modular imports ────────────────────────────────────────
 import {
   GROUND_RATIO, FROG_W_RATIO, FROG_ASPECT,
-  GRAVITY, JUMP_VEL, DIFFICULTY,
+  GRAVITY, JUMP_VEL, DIFFICULTY, SCORING, MILESTONES,
 } from "./game/constants";
 import type { ObstacleKind } from "./game/constants";
-import type { ParallaxLine, DustParticle, Obstacle, GameState } from "./game/types";
+import type { ParallaxLine, DustParticle, Obstacle, GameState, MilestoneMsg } from "./game/types";
 import { initParallaxLines, drawFrogFallback, drawObstacle, drawGround, drawSky, drawClouds, drawParallax } from "./game/drawing";
 import { playSfxJump, playSfxScore, playSfxGameOver } from "./game/sfx";
-import { StartOverlay, GameOverOverlay } from "./game/overlays";
+import { StartOverlay, GameOverOverlay, LeaderboardOverlay } from "./game/overlays";
 
 // ── Component ──────────────────────────────────────────────
 export default function FrogRunner() {
@@ -21,6 +21,8 @@ export default function FrogRunner() {
   const parallaxRef = useRef<ParallaxLine[]>([]);
   const dustRef = useRef<DustParticle[]>([]);
   const shakeRef = useRef(0);
+  const milestoneRef = useRef<MilestoneMsg | null>(null);
+  const triggeredMilestonesRef = useRef<Set<number>>(new Set());
 
   // ── Audio refs ──
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -86,6 +88,9 @@ export default function FrogRunner() {
   const stateRef = useRef<{
     gameState: GameState;
     score: number;
+    displayScore: number;  // smoothly interpolated for display
+    combo: number;         // current multiplier (1.0+)
+    peakCombo: number;     // highest combo reached this run
     frogY: number;
     frogVY: number;
     onGround: boolean;
@@ -93,7 +98,8 @@ export default function FrogRunner() {
     squashTimer: number;
     obstacles: Obstacle[];
     bestScore: number;
-    elapsed: number;       // total elapsed ms — drives difficulty ramp
+    elapsed: number;
+    survivalAccum: number; // accumulates fractional survival points
     spawnTimer: number;
     nextSpawn: number;
     lastTime: number;
@@ -103,6 +109,9 @@ export default function FrogRunner() {
   }>({
     gameState: "start",
     score: 0,
+    displayScore: 0,
+    combo: 1.0,
+    peakCombo: 1.0,
     frogY: 0,
     frogVY: 0,
     onGround: true,
@@ -111,6 +120,7 @@ export default function FrogRunner() {
     obstacles: [],
     bestScore: parseInt(localStorage.getItem("frogBest") || "0", 10),
     elapsed: 0,
+    survivalAccum: 0,
     spawnTimer: 0,
     nextSpawn: DIFFICULTY.startMaxSpawn,
     lastTime: 0,
@@ -125,6 +135,7 @@ export default function FrogRunner() {
   const [displayBest, setDisplayBest] = useState(
     parseInt(localStorage.getItem("frogBest") || "0", 10),
   );
+  const [displayCombo, setDisplayCombo] = useState(1.0);
 
   // ── Load sprite once ──
   useEffect(() => {
@@ -155,7 +166,6 @@ export default function FrogRunner() {
   // ── Compute current difficulty from elapsed time ──
   function getDifficulty(elapsed: number) {
     const D = DIFFICULTY;
-    // Progress 0→1 clamped at capTime
     const t = Math.min(elapsed / D.capTime, 1);
     return {
       speed: D.startSpeed + (D.maxSpeed - D.startSpeed) * t,
@@ -164,10 +174,20 @@ export default function FrogRunner() {
     };
   }
 
-  // ── Pick a random obstacle kind (snakes become more common over time) ──
   function pickObstacleKind(elapsed: number): ObstacleKind {
     const snakeChance = Math.min(0.45, 0.1 + elapsed / DIFFICULTY.capTime * 0.35);
     return Math.random() < snakeChance ? "snake" : "rock";
+  }
+
+  // ── Check and trigger milestone messages ──
+  function checkMilestones(score: number) {
+    for (const m of MILESTONES) {
+      if (score >= m.score && !triggeredMilestonesRef.current.has(m.score)) {
+        triggeredMilestonesRef.current.add(m.score);
+        milestoneRef.current = { text: m.text, life: 2000, maxLife: 2000 };
+        break; // one at a time
+      }
+    }
   }
 
   // ── Main game loop ──
@@ -190,6 +210,20 @@ export default function FrogRunner() {
     // ── Difficulty ramp ──
     s.elapsed += dt;
     const diff = getDifficulty(s.elapsed);
+
+    // ── Survival score (time-based) ──
+    s.survivalAccum += (dt / 1000) * SCORING.survivalPointsPerSec * s.combo;
+    if (s.survivalAccum >= 1) {
+      const pts = Math.floor(s.survivalAccum);
+      s.score += pts;
+      s.survivalAccum -= pts;
+      checkMilestones(s.score);
+    }
+
+    // ── Smooth display score ──
+    if (s.displayScore < s.score) {
+      s.displayScore = Math.min(s.score, s.displayScore + Math.max(1, Math.ceil((s.score - s.displayScore) * 0.1)));
+    }
 
     // ── Update frog physics ──
     s.frogVY += GRAVITY * scale * dt;
@@ -228,7 +262,13 @@ export default function FrogRunner() {
       if (p.life <= 0) dustRef.current.splice(i, 1);
     }
 
-    // ── Obstacle speed & spawning (driven by difficulty ramp) ──
+    // ── Update milestone message ──
+    if (milestoneRef.current) {
+      milestoneRef.current.life -= dt;
+      if (milestoneRef.current.life <= 0) milestoneRef.current = null;
+    }
+
+    // ── Obstacle speed & spawning ──
     const speed = diff.speed * scale;
     s.spawnTimer += dt;
     if (s.spawnTimer >= s.nextSpawn) {
@@ -245,12 +285,18 @@ export default function FrogRunner() {
       s.obstacles[i].x -= speed * dt;
       if (s.obstacles[i].x + s.obstacles[i].w < 0) {
         s.obstacles.splice(i, 1);
-        s.score++;
+        // Obstacle cleared → add points with combo multiplier
+        const pts = Math.round(SCORING.baseObstaclePoints * s.combo);
+        s.score += pts;
+        // Grow combo
+        s.combo = Math.min(SCORING.maxCombo, s.combo + SCORING.comboStep);
+        if (s.combo > s.peakCombo) s.peakCombo = s.combo;
+        checkMilestones(s.score);
         playSfxScore(mutedRef);
       }
     }
 
-    // ── Collision (AABB, slightly smaller hitbox) ──
+    // ── Collision ──
     const hitboxShrink = 0.15;
     const frogBox = {
       x: frogX + frogW * hitboxShrink,
@@ -276,6 +322,7 @@ export default function FrogRunner() {
         fadeAudioOut();
         setDisplayScore(s.score);
         setDisplayBest(s.bestScore);
+        setDisplayCombo(s.peakCombo);
         setOverlay("over");
         return;
       }
@@ -353,29 +400,59 @@ export default function FrogRunner() {
       ctx.restore();
     }
 
-    // ── HUD: score + best + speed indicator ──
+    // ── HUD ──
     const fontSize = Math.max(16, W * 0.035);
     ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
     ctx.fillStyle = "rgba(0,0,0,0.6)";
     ctx.textAlign = "left";
-    ctx.fillText(`Score: ${s.score}`, 14, fontSize + 10);
+    ctx.fillText(`Score: ${s.displayScore}`, 14, fontSize + 10);
+
+    // Combo multiplier (show when > 1.0)
+    if (s.combo > 1.05) {
+      const comboFontSize = Math.max(12, W * 0.025);
+      ctx.font = `bold ${comboFontSize}px system-ui, sans-serif`;
+      ctx.fillStyle = s.combo >= 2.0 ? "rgba(255,180,0,0.8)" : "rgba(100,200,100,0.8)";
+      ctx.fillText(`x${s.combo.toFixed(1)}`, 14, fontSize + 10 + comboFontSize + 4);
+    }
+
+    ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
     ctx.textAlign = "right";
     ctx.fillText(`Best: ${s.bestScore}`, W - 14, fontSize + 10);
 
-    // Subtle speed indicator (small bar under score when difficulty > 50%)
+    // Speed indicator bar
     const diffProgress = Math.min(s.elapsed / DIFFICULTY.capTime, 1);
     if (diffProgress > 0.05) {
       const barW = 80;
       const barH = 4;
       const barX = 14;
-      const barY = fontSize + 18;
+      const barY = s.combo > 1.05
+        ? fontSize + 10 + Math.max(12, W * 0.025) + 12
+        : fontSize + 18;
       ctx.fillStyle = "rgba(0,0,0,0.15)";
       ctx.fillRect(barX, barY, barW, barH);
-      // Fill color shifts from green → orange → red
       const r = Math.floor(255 * Math.min(diffProgress * 2, 1));
       const g = Math.floor(255 * Math.max(1 - diffProgress * 1.5, 0));
       ctx.fillStyle = `rgb(${r},${g},50)`;
       ctx.fillRect(barX, barY, barW * diffProgress, barH);
+    }
+
+    // ── Milestone message (centered, fading) ──
+    if (milestoneRef.current) {
+      const m = milestoneRef.current;
+      const alpha = Math.min(1, m.life / 500, (m.maxLife - (m.maxLife - m.life)) < 300 ? (m.maxLife - (m.maxLife - m.life)) / 300 : 1);
+      // Fade in first 300ms, fade out last 500ms
+      const fadeIn = Math.min(1, (m.maxLife - m.life) / 300);
+      const fadeOut = Math.min(1, m.life / 500);
+      const mAlpha = fadeIn * fadeOut;
+      const mFontSize = Math.max(20, W * 0.04);
+      ctx.save();
+      ctx.globalAlpha = mAlpha;
+      ctx.font = `bold ${mFontSize}px system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.fillText(m.text, W / 2, H * 0.25);
+      ctx.restore();
     }
 
     ctx.restore(); // end shake transform
@@ -392,6 +469,10 @@ export default function FrogRunner() {
 
     s.gameState = "playing";
     s.score = 0;
+    s.displayScore = 0;
+    s.combo = 1.0;
+    s.peakCombo = 1.0;
+    s.survivalAccum = 0;
     s.frogY = groundY - frogH;
     s.frogVY = 0;
     s.onGround = true;
@@ -399,6 +480,8 @@ export default function FrogRunner() {
     s.squashTimer = 0;
     s.obstacles = [];
     dustRef.current = [];
+    milestoneRef.current = null;
+    triggeredMilestonesRef.current = new Set();
     s.elapsed = 0;
     s.spawnTimer = 0;
     s.nextSpawn = DIFFICULTY.startMaxSpawn;
@@ -409,6 +492,19 @@ export default function FrogRunner() {
     cancelAnimationFrame(s.animId);
     s.animId = requestAnimationFrame(loop);
   }, [loop, fadeAudioIn]);
+
+  // ── Go back to menu ──
+  const goToMenu = useCallback(() => {
+    const s = stateRef.current;
+    cancelAnimationFrame(s.animId);
+    s.gameState = "start";
+    setOverlay("start");
+  }, []);
+
+  // ── Show leaderboard ──
+  const showLeaderboard = useCallback(() => {
+    setOverlay("leaderboard");
+  }, []);
 
   // ── Jump ──
   const jump = useCallback(() => {
@@ -421,7 +517,6 @@ export default function FrogRunner() {
     s.onGround = false;
     playSfxJump(mutedRef);
 
-    // Jump dust puff
     const groundY = s.canvasH * GROUND_RATIO;
     const frogW = s.canvasW * FROG_W_RATIO;
     const frogX = s.canvasW * 0.1;
@@ -460,7 +555,7 @@ export default function FrogRunner() {
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
-      if ((e.target as HTMLElement).closest?.('[data-ui-button="mute"]')) return;
+      if ((e.target as HTMLElement).closest?.('[data-ui-button]')) return;
       e.preventDefault();
       jump();
     },
@@ -490,14 +585,22 @@ export default function FrogRunner() {
       </button>
 
       {/* ── Overlay screens ── */}
-      {overlay === "start" && <StartOverlay onStart={startGame} />}
+      {overlay === "start" && (
+        <StartOverlay onStart={startGame} onLeaderboard={showLeaderboard} />
+      )}
 
       {overlay === "over" && (
         <GameOverOverlay
           score={displayScore}
           best={displayBest}
+          combo={displayCombo}
           onRestart={startGame}
+          onMenu={goToMenu}
         />
+      )}
+
+      {overlay === "leaderboard" && (
+        <LeaderboardOverlay onBack={goToMenu} />
       )}
     </div>
   );

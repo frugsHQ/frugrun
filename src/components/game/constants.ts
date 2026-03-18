@@ -13,25 +13,40 @@ export const PARALLAX_LAYERS = [
 ];
 
 // ── Endless-mode difficulty ramp config ────────────────────
-// All difficulty values in one place for easy tweaking.
 export const DIFFICULTY = {
-  // Starting values
-  startSpeed: 0.28,       // initial obstacle speed multiplier
-  startMinSpawn: 1000,    // initial min ms between spawns
-  startMaxSpawn: 1900,    // initial max ms between spawns
-
-  // Maximum difficulty caps
-  maxSpeed: 0.60,         // fastest obstacle speed
-  minMinSpawn: 350,       // fastest possible spawn interval
-  minMaxSpawn: 700,       // cap for the max-spawn interval
-
-  // How fast difficulty ramps (per ms of elapsed time)
-  speedRamp: 0.000015,    // speed increase per ms
-  spawnRamp: 0.008,       // spawn interval decrease per ms (applied to both min & max)
-
-  // Time (ms) at which difficulty is fully capped (~2.5 min)
+  startSpeed: 0.28,
+  startMinSpawn: 1000,
+  startMaxSpawn: 1900,
+  maxSpeed: 0.60,
+  minMinSpawn: 350,
+  minMaxSpawn: 700,
+  speedRamp: 0.000015,
+  spawnRamp: 0.008,
   capTime: 150_000,
 } as const;
 
 // ── Obstacle types ─────────────────────────────────────────
 export type ObstacleKind = "rock" | "snake";
+
+// ── Scoring config ─────────────────────────────────────────
+export const SCORING = {
+  // Points awarded per obstacle cleared (base, before multiplier)
+  baseObstaclePoints: 10,
+  // Points per second of survival
+  survivalPointsPerSec: 1,
+  // Combo multiplier: grows by this much per obstacle cleared without dying
+  comboStep: 0.1,
+  // Maximum combo multiplier
+  maxCombo: 3.0,
+} as const;
+
+// ── Milestone messages (triggered at score thresholds) ─────
+export const MILESTONES = [
+  { score: 50, text: "🏃 Getting started!" },
+  { score: 150, text: "⚡ Speed increasing!" },
+  { score: 300, text: "🔥 You're on a roll!" },
+  { score: 500, text: "💪 Watch out!" },
+  { score: 800, text: "🌟 Incredible!" },
+  { score: 1200, text: "👑 Unstoppable!" },
+  { score: 2000, text: "🐸 Frog legend!" },
+] as const;
