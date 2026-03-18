@@ -1,10 +1,11 @@
 import { useRef, useEffect, useCallback, useState } from "react";
-import frugSprite from "@/assets/frug-sprite.png";
+import frugFrame1 from "@/assets/frug-frame1.png";
+import frugFrame2 from "@/assets/frug-frame2.png";
 import bgMusicSrc from "@/assets/bg-music.mp3";
 
 // ── Modular imports ────────────────────────────────────────
 import {
-  GROUND_RATIO, FROG_W_RATIO, FROG_ASPECT,
+  GROUND_RATIO, FROG_W_RATIO, FROG_ASPECT, FROG_Y_OFFSET,
   GRAVITY, JUMP_VEL, DIFFICULTY, SCORING, MILESTONES,
 } from "./game/constants";
 import type { ObstacleKind } from "./game/constants";
@@ -16,8 +17,11 @@ import { StartOverlay, GameOverOverlay, LeaderboardOverlay } from "./game/overla
 // ── Component ──────────────────────────────────────────────
 export default function FrogRunner() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const spriteRef = useRef<HTMLImageElement | null>(null);
-  const spriteLoadedRef = useRef(false);
+  const spriteFramesRef = useRef<HTMLImageElement[]>([]);
+  const spritesLoadedRef = useRef(0);
+  const animFrameRef = useRef(0);
+  const animTimerRef = useRef(0);
+  const ANIM_FRAME_DURATION = 180;
   const parallaxRef = useRef<ParallaxLine[]>([]);
   const dustRef = useRef<DustParticle[]>([]);
   const shakeRef = useRef(0);
@@ -137,12 +141,17 @@ export default function FrogRunner() {
   );
   const [displayCombo, setDisplayCombo] = useState(1.0);
 
-  // ── Load sprite once ──
+  // ── Load sprite frames once ──
   useEffect(() => {
-    const img = new Image();
-    img.src = frugSprite;
-    img.onload = () => { spriteLoadedRef.current = true; };
-    spriteRef.current = img;
+    const srcs = [frugFrame1, frugFrame2];
+    const imgs: HTMLImageElement[] = [];
+    srcs.forEach((src) => {
+      const img = new Image();
+      img.src = src;
+      img.onload = () => { spritesLoadedRef.current++; };
+      imgs.push(img);
+    });
+    spriteFramesRef.current = imgs;
   }, []);
 
   // ── Resize canvas ──
@@ -229,8 +238,9 @@ export default function FrogRunner() {
     s.frogVY += GRAVITY * scale * dt;
     s.frogY += s.frogVY * scale * dt;
     const justLanded = !s.onGround;
-    if (s.frogY >= groundY - frogH) {
-      s.frogY = groundY - frogH;
+    const frogRestY = groundY - frogH + frogH * FROG_Y_OFFSET; // lowered to sit on ground
+    if (s.frogY >= frogRestY) {
+      s.frogY = frogRestY;
       s.frogVY = 0;
       s.onGround = true;
       if (justLanded && !s.wasOnGround) {
@@ -362,6 +372,18 @@ export default function FrogRunner() {
     ctx.fill();
     ctx.restore();
 
+    // ── 2-frame running animation ──
+    // Cycle frames only while on ground; freeze on frame 0 while airborne
+    if (s.onGround) {
+      animTimerRef.current += dt;
+      if (animTimerRef.current >= ANIM_FRAME_DURATION) {
+        animTimerRef.current -= ANIM_FRAME_DURATION;
+        animFrameRef.current = animFrameRef.current === 0 ? 1 : 0;
+      }
+    } else {
+      animFrameRef.current = 0; // use frame 0 while jumping
+    }
+
     // ── Squash & stretch + tilt ──
     let scaleX = 1, scaleY = 1, rotation = 0;
     if (!s.onGround) {
@@ -382,8 +404,9 @@ export default function FrogRunner() {
     ctx.save();
     ctx.translate(drawX + drawW / 2, drawY + drawH / 2);
     ctx.rotate(rotation);
-    if (spriteLoadedRef.current && spriteRef.current) {
-      ctx.drawImage(spriteRef.current, -drawW / 2, -drawH / 2, drawW, drawH);
+    const currentFrame = spriteFramesRef.current[animFrameRef.current];
+    if (spritesLoadedRef.current >= 2 && currentFrame) {
+      ctx.drawImage(currentFrame, -drawW / 2, -drawH / 2, drawW, drawH);
     } else {
       drawFrogFallback(ctx, -drawW / 2, -drawH / 2, drawW, drawH);
     }
@@ -473,7 +496,7 @@ export default function FrogRunner() {
     s.combo = 1.0;
     s.peakCombo = 1.0;
     s.survivalAccum = 0;
-    s.frogY = groundY - frogH;
+    s.frogY = groundY - frogH + frogH * FROG_Y_OFFSET;
     s.frogVY = 0;
     s.onGround = true;
     s.wasOnGround = true;
