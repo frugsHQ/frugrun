@@ -2,214 +2,25 @@ import { useRef, useEffect, useCallback, useState } from "react";
 import frugSprite from "@/assets/frug-sprite.png";
 import bgMusicSrc from "@/assets/bg-music.mp3";
 
-// ── Constants ──────────────────────────────────────────────
-const GROUND_RATIO = 0.82;
-const FROG_W_RATIO = 0.14;
-const FROG_ASPECT = 1.1;
-const GRAVITY = 0.0018;
-const JUMP_VEL = -0.85;
-const BASE_OBS_SPEED = 0.35;
-const MIN_SPAWN = 700;
-const MAX_SPAWN = 1600;
-const SPEED_INCREASE = 0.00002;
-const SPAWN_DECREASE = 0.005;
-
-// ── Parallax config ────────────────────────────────────────
-const PARALLAX_LAYERS = [
-  { count: 25, speedFactor: 0.08, yMin: 0.15, yMax: 0.55, alpha: 0.08, lenMin: 30, lenMax: 80 },
-  { count: 20, speedFactor: 0.15, yMin: 0.25, yMax: 0.65, alpha: 0.12, lenMin: 20, lenMax: 60 },
-  { count: 15, speedFactor: 0.25, yMin: 0.35, yMax: 0.75, alpha: 0.18, lenMin: 15, lenMax: 45 },
-];
-
-interface ParallaxLine {
-  x: number;
-  y: number;
-  len: number;
-  layer: number;
-}
-
-function initParallaxLines(w: number, h: number): ParallaxLine[] {
-  const lines: ParallaxLine[] = [];
-  PARALLAX_LAYERS.forEach((cfg, layer) => {
-    for (let i = 0; i < cfg.count; i++) {
-      lines.push({
-        x: Math.random() * (w + 200),
-        y: h * cfg.yMin + Math.random() * h * (cfg.yMax - cfg.yMin),
-        len: cfg.lenMin + Math.random() * (cfg.lenMax - cfg.lenMin),
-        layer,
-      });
-    }
-  });
-  return lines;
-}
-
-// ── Dust particle ──────────────────────────────────────────
-interface DustParticle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  maxLife: number;
-  size: number;
-}
-
-// ── Types ──────────────────────────────────────────────────
-interface Obstacle {
-  x: number;
-  w: number;
-  h: number;
-}
-
-type GameState = "start" | "playing" | "over";
-
-// ── Drawing helpers ────────────────────────────────────────
-function drawFrogFallback(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number
-) {
-  ctx.fillStyle = "#3cb043";
-  ctx.beginPath();
-  const r = w * 0.3;
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.fill();
-}
-
-function drawObstacle(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  groundY: number,
-  w: number,
-  h: number
-) {
-  ctx.fillStyle = "#8B4513";
-  ctx.fillRect(x, groundY - h, w, h);
-  ctx.fillStyle = "#654321";
-  ctx.beginPath();
-  ctx.moveTo(x, groundY - h);
-  ctx.lineTo(x + w / 2, groundY - h - h * 0.3);
-  ctx.lineTo(x + w, groundY - h);
-  ctx.fill();
-}
-
-function drawGround(ctx: CanvasRenderingContext2D, w: number, groundY: number, h: number) {
-  ctx.fillStyle = "#5a3e1b";
-  ctx.fillRect(0, groundY, w, h - groundY);
-  ctx.fillStyle = "#4a7c24";
-  ctx.fillRect(0, groundY - 3, w, 6);
-}
-
-function drawSky(ctx: CanvasRenderingContext2D, w: number, groundY: number) {
-  const grad = ctx.createLinearGradient(0, 0, 0, groundY);
-  grad.addColorStop(0, "#87CEEB");
-  grad.addColorStop(1, "#d4f0ff");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, w, groundY);
-}
-
-function drawClouds(ctx: CanvasRenderingContext2D, w: number, time: number) {
-  ctx.fillStyle = "rgba(255,255,255,0.7)";
-  for (let i = 0; i < 4; i++) {
-    const cx = ((time * 0.015 * (i + 1) * 0.3 + i * w * 0.3) % (w + 120)) - 60;
-    const cy = 40 + i * 35;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, 50 + i * 10, 18 + i * 4, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-function drawParallax(
-  ctx: CanvasRenderingContext2D,
-  lines: ParallaxLine[],
-  speed: number,
-  dt: number,
-  w: number
-) {
-  for (const line of lines) {
-    const cfg = PARALLAX_LAYERS[line.layer];
-    line.x -= speed * cfg.speedFactor * dt;
-    if (line.x + line.len < 0) {
-      line.x = w + Math.random() * 100;
-    }
-    ctx.strokeStyle = `rgba(255,255,255,${cfg.alpha})`;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(line.x, line.y);
-    ctx.lineTo(line.x + line.len, line.y);
-    ctx.stroke();
-  }
-}
+// ── Modular imports ────────────────────────────────────────
+import {
+  GROUND_RATIO, FROG_W_RATIO, FROG_ASPECT,
+  GRAVITY, JUMP_VEL, SPEED_INCREASE, SPAWN_DECREASE,
+  LEVELS,
+} from "./game/constants";
+import type { ParallaxLine, DustParticle, Obstacle, GameState } from "./game/types";
+import { initParallaxLines, drawFrogFallback, drawObstacle, drawGround, drawSky, drawClouds, drawParallax } from "./game/drawing";
+import { playSfxJump, playSfxScore, playSfxGameOver, playSfxLevelComplete } from "./game/sfx";
+import { StartOverlay, LevelStartOverlay, LevelCompleteOverlay, GameOverOverlay, VictoryOverlay } from "./game/overlays";
 
 // ── Component ──────────────────────────────────────────────
-// ── SFX helpers (Web Audio API) ────────────────────────────
-let sfxCtx: AudioContext | null = null;
-function getSfxCtx() {
-  if (!sfxCtx) sfxCtx = new AudioContext();
-  return sfxCtx;
-}
-
-function playSfxJump(mutedFlag: { current: boolean }) {
-  if (mutedFlag.current) return;
-  const ctx = getSfxCtx();
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = "sine";
-  osc.frequency.setValueAtTime(400, ctx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.15);
-  gain.gain.setValueAtTime(0.15, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
-  osc.connect(gain).connect(ctx.destination);
-  osc.start(); osc.stop(ctx.currentTime + 0.2);
-}
-
-function playSfxScore(mutedFlag: { current: boolean }) {
-  if (mutedFlag.current) return;
-  const ctx = getSfxCtx();
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = "triangle";
-  osc.frequency.setValueAtTime(600, ctx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
-  gain.gain.setValueAtTime(0.12, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-  osc.connect(gain).connect(ctx.destination);
-  osc.start(); osc.stop(ctx.currentTime + 0.15);
-}
-
-function playSfxGameOver(mutedFlag: { current: boolean }) {
-  if (mutedFlag.current) return;
-  const ctx = getSfxCtx();
-  [200, 150, 100].forEach((freq, i) => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "square";
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0.1, ctx.currentTime + i * 0.12);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.12 + 0.15);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(ctx.currentTime + i * 0.12);
-    osc.stop(ctx.currentTime + i * 0.12 + 0.15);
-  });
-}
-
 export default function FrogRunner() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const spriteRef = useRef<HTMLImageElement | null>(null);
   const spriteLoadedRef = useRef(false);
   const parallaxRef = useRef<ParallaxLine[]>([]);
-
   const dustRef = useRef<DustParticle[]>([]);
+  const shakeRef = useRef(0); // screen-shake timer (ms remaining)
 
   // ── Audio refs ──
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -271,15 +82,18 @@ export default function FrogRunner() {
     setMuted(next);
   }, []);
 
+  // ── Core game state (ref to avoid re-renders during loop) ──
   const stateRef = useRef<{
     gameState: GameState;
+    currentLevel: number;    // 0-indexed into LEVELS
+    levelScore: number;      // score within current level
+    totalScore: number;      // accumulated across levels
     frogY: number;
     frogVY: number;
     onGround: boolean;
     wasOnGround: boolean;
     squashTimer: number;
     obstacles: Obstacle[];
-    score: number;
     bestScore: number;
     elapsed: number;
     spawnTimer: number;
@@ -290,13 +104,15 @@ export default function FrogRunner() {
     canvasH: number;
   }>({
     gameState: "start",
+    currentLevel: 0,
+    levelScore: 0,
+    totalScore: 0,
     frogY: 0,
     frogVY: 0,
     onGround: true,
     wasOnGround: true,
     squashTimer: 0,
     obstacles: [],
-    score: 0,
     bestScore: parseInt(localStorage.getItem("frogBest") || "0", 10),
     elapsed: 0,
     spawnTimer: 0,
@@ -307,19 +123,20 @@ export default function FrogRunner() {
     canvasH: 0,
   });
 
+  // ── React-side state for overlays ──
   const [overlay, setOverlay] = useState<GameState>("start");
-  const [displayScore, setDisplayScore] = useState(0);
+  const [displayLevelScore, setDisplayLevelScore] = useState(0);
+  const [displayTotalScore, setDisplayTotalScore] = useState(0);
   const [displayBest, setDisplayBest] = useState(
-    parseInt(localStorage.getItem("frogBest") || "0", 10)
+    parseInt(localStorage.getItem("frogBest") || "0", 10),
   );
+  const [displayLevel, setDisplayLevel] = useState(0);
 
   // ── Load sprite once ──
   useEffect(() => {
     const img = new Image();
     img.src = frugSprite;
-    img.onload = () => {
-      spriteLoadedRef.current = true;
-    };
+    img.onload = () => { spriteLoadedRef.current = true; };
     spriteRef.current = img;
   }, []);
 
@@ -341,7 +158,7 @@ export default function FrogRunner() {
     parallaxRef.current = initParallaxLines(w, h);
   }, []);
 
-  // ── Game loop ──
+  // ── Main game loop ──
   const loop = useCallback((time: number) => {
     const s = stateRef.current;
     const canvas = canvasRef.current;
@@ -357,8 +174,9 @@ export default function FrogRunner() {
     const frogH = frogW * FROG_ASPECT;
     const frogX = W * 0.1;
     const scale = W / 400;
+    const lvl = LEVELS[s.currentLevel];
 
-    // ── Update frog ──
+    // ── Update frog physics ──
     s.frogVY += GRAVITY * scale * dt;
     s.frogY += s.frogVY * scale * dt;
     const justLanded = !s.onGround;
@@ -367,8 +185,8 @@ export default function FrogRunner() {
       s.frogVY = 0;
       s.onGround = true;
       if (justLanded && !s.wasOnGround) {
-        // Spawn dust particles on landing
         s.squashTimer = 100;
+        // Landing dust particles
         const footY = groundY;
         const footX = frogX + frogW / 2;
         for (let i = 0; i < 6; i++) {
@@ -396,30 +214,57 @@ export default function FrogRunner() {
       if (p.life <= 0) dustRef.current.splice(i, 1);
     }
 
-    // ── Obstacle speed & spawning ──
+    // ── Obstacle speed & spawning (driven by level config) ──
     s.elapsed += dt;
-    const speed = (BASE_OBS_SPEED + SPEED_INCREASE * s.elapsed) * scale;
+    const speed = (lvl.baseSpeed + SPEED_INCREASE * s.elapsed) * scale;
     s.spawnTimer += dt;
     if (s.spawnTimer >= s.nextSpawn) {
       s.spawnTimer = 0;
-      const interval = Math.max(MIN_SPAWN, MAX_SPAWN - SPAWN_DECREASE * s.elapsed);
+      const interval = Math.max(lvl.minSpawn, lvl.maxSpawn - SPAWN_DECREASE * s.elapsed);
       s.nextSpawn = interval * (0.6 + Math.random() * 0.8);
       const ow = frogW * (0.5 + Math.random() * 0.5);
       const oh = frogH * (0.6 + Math.random() * 0.7);
       s.obstacles.push({ x: W + 10, w: ow, h: oh });
     }
 
-    // ── Move obstacles ──
+    // ── Move obstacles & score ──
     for (let i = s.obstacles.length - 1; i >= 0; i--) {
       s.obstacles[i].x -= speed * dt;
       if (s.obstacles[i].x + s.obstacles[i].w < 0) {
         s.obstacles.splice(i, 1);
-        s.score++;
+        s.levelScore++;
+        s.totalScore++;
         playSfxScore(mutedRef);
+
+        // ── Check level completion ──
+        if (s.levelScore >= lvl.targetScore) {
+          s.gameState = "levelComplete";
+          playSfxLevelComplete(mutedRef);
+          fadeAudioOut();
+
+          if (s.totalScore > s.bestScore) {
+            s.bestScore = s.totalScore;
+            localStorage.setItem("frogBest", String(s.bestScore));
+          }
+
+          setDisplayLevelScore(s.levelScore);
+          setDisplayTotalScore(s.totalScore);
+          setDisplayBest(s.bestScore);
+          setDisplayLevel(s.currentLevel);
+
+          // Last level? → victory
+          if (s.currentLevel >= LEVELS.length - 1) {
+            s.gameState = "victory";
+            setOverlay("victory");
+          } else {
+            setOverlay("levelComplete");
+          }
+          return;
+        }
       }
     }
 
-    // ── Collision (AABB) – hitbox slightly smaller than sprite ──
+    // ── Collision (AABB, slightly smaller hitbox) ──
     const hitboxShrink = 0.15;
     const frogBox = {
       x: frogX + frogW * hitboxShrink,
@@ -436,21 +281,33 @@ export default function FrogRunner() {
         frogBox.y + frogBox.h > obBox.y
       ) {
         s.gameState = "over";
+        shakeRef.current = 300; // trigger screen shake
         playSfxGameOver(mutedRef);
-        if (s.score > s.bestScore) {
-          s.bestScore = s.score;
+        if (s.totalScore > s.bestScore) {
+          s.bestScore = s.totalScore;
           localStorage.setItem("frogBest", String(s.bestScore));
         }
         fadeAudioOut();
-        setOverlay("over");
-        setDisplayScore(s.score);
+        setDisplayTotalScore(s.totalScore);
         setDisplayBest(s.bestScore);
+        setOverlay("over");
         return;
       }
     }
 
-    // ── Draw ──
-    ctx.clearRect(0, 0, W, H);
+    // ── Screen shake offset ──
+    let shakeX = 0, shakeY = 0;
+    if (shakeRef.current > 0) {
+      shakeRef.current = Math.max(0, shakeRef.current - dt);
+      const intensity = (shakeRef.current / 300) * 6;
+      shakeX = (Math.random() - 0.5) * intensity;
+      shakeY = (Math.random() - 0.5) * intensity;
+    }
+
+    // ── Draw everything ──
+    ctx.save();
+    ctx.translate(shakeX, shakeY);
+    ctx.clearRect(-10, -10, W + 20, H + 20);
     drawSky(ctx, W, groundY);
     drawParallax(ctx, parallaxRef.current, speed, dt, W);
     drawClouds(ctx, W, s.elapsed);
@@ -460,7 +317,7 @@ export default function FrogRunner() {
       drawObstacle(ctx, ob.x, groundY, ob.w, ob.h);
     }
 
-    // ── Ground shadow ──
+    // ── Ground shadow under frog ──
     const airHeight = groundY - frogH - s.frogY;
     const maxAir = groundY - frogH;
     const shadowScale = Math.max(0.4, 1 - (airHeight / maxAir) * 0.6);
@@ -473,16 +330,12 @@ export default function FrogRunner() {
     ctx.restore();
 
     // ── Squash & stretch + tilt ──
-    let scaleX = 1;
-    let scaleY = 1;
-    let rotation = 0;
+    let scaleX = 1, scaleY = 1, rotation = 0;
     if (!s.onGround) {
-      // In air: stretch vertically
       scaleX = 0.93;
       scaleY = 1.08;
-      rotation = s.frogVY < 0 ? -0.087 : 0.087; // ~5 degrees
+      rotation = s.frogVY < 0 ? -0.087 : 0.087;
     } else if (s.squashTimer > 0) {
-      // Landing squash
       const t = s.squashTimer / 100;
       scaleX = 1 + 0.1 * t;
       scaleY = 1 - 0.08 * t;
@@ -491,7 +344,7 @@ export default function FrogRunner() {
     const drawW = frogW * scaleX;
     const drawH = frogH * scaleY;
     const drawX = frogX + (frogW - drawW) / 2;
-    const drawY = s.frogY + frogH - drawH; // anchor to feet
+    const drawY = s.frogY + frogH - drawH;
 
     ctx.save();
     ctx.translate(drawX + drawW / 2, drawY + drawH / 2);
@@ -514,20 +367,21 @@ export default function FrogRunner() {
       ctx.restore();
     }
 
-    // Score HUD
-    const fontSize = Math.max(16, W * 0.04);
+    // ── HUD: score + level ──
+    const fontSize = Math.max(16, W * 0.035);
     ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
     ctx.fillStyle = "rgba(0,0,0,0.6)";
     ctx.textAlign = "left";
-    ctx.fillText(`Score: ${s.score}`, 14, fontSize + 10);
+    ctx.fillText(`Lvl ${lvl.level}  Score: ${s.levelScore}/${lvl.targetScore}`, 14, fontSize + 10);
     ctx.textAlign = "right";
-    ctx.fillText(`Best: ${s.bestScore}`, W - 14, fontSize + 10);
+    ctx.fillText(`Total: ${s.totalScore}  Best: ${s.bestScore}`, W - 14, fontSize + 10);
 
+    ctx.restore(); // end shake transform
     s.animId = requestAnimationFrame(loop);
   }, [fadeAudioOut]);
 
-  // ── Start / Restart ──
-  const startGame = useCallback(() => {
+  // ── Begin a specific level ──
+  const beginLevel = useCallback((levelIndex: number, keepTotalScore = true) => {
     const s = stateRef.current;
     const H = s.canvasH;
     const groundY = H * GROUND_RATIO;
@@ -535,6 +389,9 @@ export default function FrogRunner() {
     const frogH = frogW * FROG_ASPECT;
 
     s.gameState = "playing";
+    s.currentLevel = levelIndex;
+    s.levelScore = 0;
+    if (!keepTotalScore) s.totalScore = 0;
     s.frogY = groundY - frogH;
     s.frogVY = 0;
     s.onGround = true;
@@ -542,10 +399,9 @@ export default function FrogRunner() {
     s.squashTimer = 0;
     s.obstacles = [];
     dustRef.current = [];
-    s.score = 0;
     s.elapsed = 0;
     s.spawnTimer = 0;
-    s.nextSpawn = 1200;
+    s.nextSpawn = LEVELS[levelIndex].maxSpawn;
     s.lastTime = 0;
     parallaxRef.current = initParallaxLines(s.canvasW, s.canvasH);
     setOverlay("playing");
@@ -554,19 +410,58 @@ export default function FrogRunner() {
     s.animId = requestAnimationFrame(loop);
   }, [loop, fadeAudioIn]);
 
+  // ── Show level-start overlay for a given level ──
+  const showLevelStart = useCallback((levelIndex: number, keepTotal = true) => {
+    const s = stateRef.current;
+    s.gameState = "levelStart";
+    s.currentLevel = levelIndex;
+    if (!keepTotal) s.totalScore = 0;
+    setDisplayLevel(levelIndex);
+    setOverlay("levelStart");
+  }, []);
+
+  // ── First start from title ──
+  const startGame = useCallback(() => {
+    showLevelStart(0, false);
+  }, [showLevelStart]);
+
+  // ── Restart after game-over ──
+  const restartGame = useCallback(() => {
+    stateRef.current.totalScore = 0;
+    showLevelStart(0, false);
+  }, [showLevelStart]);
+
+  // ── Continue to next level ──
+  const continueToNextLevel = useCallback(() => {
+    showLevelStart(stateRef.current.currentLevel + 1, true);
+  }, [showLevelStart]);
+
   // ── Jump ──
   const jump = useCallback(() => {
     const s = stateRef.current;
-    if (s.gameState === "start") {
-      startGame();
-      return;
-    }
+    if (s.gameState === "start") { startGame(); return; }
     if (s.gameState !== "playing") return;
     if (!s.onGround) return;
     const scale = s.canvasW / 400;
     s.frogVY = JUMP_VEL * scale;
     s.onGround = false;
     playSfxJump(mutedRef);
+
+    // Jump dust puff
+    const groundY = s.canvasH * GROUND_RATIO;
+    const frogW = s.canvasW * FROG_W_RATIO;
+    const frogX = s.canvasW * 0.1;
+    for (let i = 0; i < 4; i++) {
+      dustRef.current.push({
+        x: frogX + frogW * (0.2 + Math.random() * 0.6),
+        y: groundY - Math.random() * 3,
+        vx: (Math.random() - 0.5) * 0.1 * scale,
+        vy: -Math.random() * 0.04 * scale,
+        life: 200 + Math.random() * 150,
+        maxLife: 200 + Math.random() * 150,
+        size: 1.5 + Math.random() * 2,
+      });
+    }
   }, [startGame]);
 
   // ── Input handlers ──
@@ -595,7 +490,7 @@ export default function FrogRunner() {
       e.preventDefault();
       jump();
     },
-    [jump]
+    [jump],
   );
 
   // ── Render ──
@@ -614,51 +509,46 @@ export default function FrogRunner() {
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleMute(); }}
         onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
         className="absolute right-3 z-20 w-10 h-10 flex items-center justify-center rounded-full bg-black/40 text-white text-xl backdrop-blur-sm hover:bg-black/60 transition-colors"
-        style={{ top: 'calc(env(safe-area-inset-top, 0px) + 60px)' }}
+        style={{ top: "calc(env(safe-area-inset-top, 0px) + 60px)" }}
         aria-label={muted ? "Unmute" : "Mute"}
       >
         {muted ? "🔇" : "🔊"}
       </button>
 
-      {overlay === "start" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 z-10">
-          <div className="text-center px-6">
-            <h1 className="text-4xl sm:text-5xl font-extrabold text-white mb-2 drop-shadow-lg">
-              🐸 Frug Run
-            </h1>
-            <p className="text-lg text-white/80 mb-8">
-              Tap anywhere or press Space to jump
-            </p>
-            <button
-              onClick={startGame}
-              className="px-8 py-4 bg-primary text-primary-foreground rounded-2xl text-xl font-bold shadow-lg hover:scale-105 active:scale-95 transition-transform"
-            >
-              Tap to Start
-            </button>
-          </div>
-        </div>
+      {/* ── Overlay screens ── */}
+      {overlay === "start" && <StartOverlay onStart={startGame} />}
+
+      {overlay === "levelStart" && (
+        <LevelStartOverlay
+          level={LEVELS[displayLevel]}
+          onContinue={() => beginLevel(displayLevel, displayLevel > 0)}
+        />
+      )}
+
+      {overlay === "levelComplete" && (
+        <LevelCompleteOverlay
+          level={LEVELS[displayLevel].level}
+          score={displayLevelScore}
+          totalScore={displayTotalScore}
+          nextLevel={LEVELS[displayLevel + 1]?.level ?? displayLevel + 2}
+          onContinue={continueToNextLevel}
+        />
       )}
 
       {overlay === "over" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 z-10">
-          <div className="text-center px-6">
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4 drop-shadow-lg">
-              Game Over
-            </h2>
-            <p className="text-2xl text-white mb-1">
-              Score: <span className="font-bold text-accent">{displayScore}</span>
-            </p>
-            <p className="text-lg text-white/70 mb-8">
-              Best: <span className="font-bold">{displayBest}</span>
-            </p>
-            <button
-              onClick={startGame}
-              className="px-8 py-4 bg-primary text-primary-foreground rounded-2xl text-xl font-bold shadow-lg hover:scale-105 active:scale-95 transition-transform"
-            >
-              Restart
-            </button>
-          </div>
-        </div>
+        <GameOverOverlay
+          score={displayTotalScore}
+          best={displayBest}
+          onRestart={restartGame}
+        />
+      )}
+
+      {overlay === "victory" && (
+        <VictoryOverlay
+          totalScore={displayTotalScore}
+          best={displayBest}
+          onPlayAgain={restartGame}
+        />
       )}
     </div>
   );
