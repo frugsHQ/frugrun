@@ -137,12 +137,17 @@ export default function FrogRunner() {
   );
   const [displayCombo, setDisplayCombo] = useState(1.0);
 
-  // ── Load sprite once ──
+  // ── Load sprite frames once ──
   useEffect(() => {
-    const img = new Image();
-    img.src = frugSprite;
-    img.onload = () => { spriteLoadedRef.current = true; };
-    spriteRef.current = img;
+    const srcs = [frugFrame1, frugFrame2];
+    const imgs: HTMLImageElement[] = [];
+    srcs.forEach((src) => {
+      const img = new Image();
+      img.src = src;
+      img.onload = () => { spritesLoadedRef.current++; };
+      imgs.push(img);
+    });
+    spriteFramesRef.current = imgs;
   }, []);
 
   // ── Resize canvas ──
