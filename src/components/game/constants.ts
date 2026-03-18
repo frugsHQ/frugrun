@@ -2,6 +2,8 @@
 export const GROUND_RATIO = 0.82;
 export const FROG_W_RATIO = 0.14;
 export const FROG_ASPECT = 1.1;
+// Fraction of frogH to shift the sprite down (visually sits on ground better)
+export const FROG_Y_OFFSET = 0.12;
 export const GRAVITY = 0.0018;
 export const JUMP_VEL = -0.85;
 
