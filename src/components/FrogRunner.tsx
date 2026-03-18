@@ -496,7 +496,7 @@ export default function FrogRunner() {
     s.combo = 1.0;
     s.peakCombo = 1.0;
     s.survivalAccum = 0;
-    s.frogY = groundY - frogH;
+    s.frogY = groundY - frogH + frogH * FROG_Y_OFFSET;
     s.frogVY = 0;
     s.onGround = true;
     s.wasOnGround = true;
