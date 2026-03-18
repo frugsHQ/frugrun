@@ -307,15 +307,26 @@ export default function FrogRunner() {
     }
 
     // ── Collision ──
-    const hitboxShrink = 0.15;
+    // Player hitbox: shrink to ~70% width and ~75% height, centered on sprite
+    const frogPadX = frogW * 0.15;   // 15% padding each side → 70% width
+    const frogPadTop = frogH * 0.18; // trim top (head space)
+    const frogPadBot = frogH * 0.07; // small trim at feet
     const frogBox = {
-      x: frogX + frogW * hitboxShrink,
-      y: s.frogY + frogH * hitboxShrink,
-      w: frogW * (1 - hitboxShrink * 2),
-      h: frogH * (1 - hitboxShrink * 2),
+      x: frogX + frogPadX,
+      y: s.frogY + frogPadTop,
+      w: frogW - frogPadX * 2,
+      h: frogH - frogPadTop - frogPadBot,
     };
     for (const ob of s.obstacles) {
-      const obBox = { x: ob.x, y: groundY - ob.h, w: ob.w, h: ob.h };
+      // Obstacle hitbox: shrink to ~75% width, trim top by 20% (avoid "hitting air")
+      const obPadX = ob.w * 0.125;  // 12.5% padding each side → 75% width
+      const obPadTop = ob.h * 0.2;  // 20% trimmed from top
+      const obBox = {
+        x: ob.x + obPadX,
+        y: groundY - ob.h + obPadTop,
+        w: ob.w - obPadX * 2,
+        h: ob.h - obPadTop,
+      };
       if (
         frogBox.x < obBox.x + obBox.w &&
         frogBox.x + frogBox.w > obBox.x &&
