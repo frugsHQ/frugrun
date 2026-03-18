@@ -17,8 +17,11 @@ import { StartOverlay, GameOverOverlay, LeaderboardOverlay } from "./game/overla
 // ── Component ──────────────────────────────────────────────
 export default function FrogRunner() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const spriteRef = useRef<HTMLImageElement | null>(null);
-  const spriteLoadedRef = useRef(false);
+  const spriteFramesRef = useRef<HTMLImageElement[]>([]);
+  const spritesLoadedRef = useRef(0);
+  const animFrameRef = useRef(0);
+  const animTimerRef = useRef(0);
+  const ANIM_FRAME_DURATION = 180;
   const parallaxRef = useRef<ParallaxLine[]>([]);
   const dustRef = useRef<DustParticle[]>([]);
   const shakeRef = useRef(0);
