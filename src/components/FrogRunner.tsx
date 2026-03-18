@@ -238,8 +238,9 @@ export default function FrogRunner() {
     s.frogVY += GRAVITY * scale * dt;
     s.frogY += s.frogVY * scale * dt;
     const justLanded = !s.onGround;
-    if (s.frogY >= groundY - frogH) {
-      s.frogY = groundY - frogH;
+    const frogRestY = groundY - frogH + frogH * FROG_Y_OFFSET; // lowered to sit on ground
+    if (s.frogY >= frogRestY) {
+      s.frogY = frogRestY;
       s.frogVY = 0;
       s.onGround = true;
       if (justLanded && !s.wasOnGround) {
