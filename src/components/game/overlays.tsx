@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { fetchLeaderboard, saveScore, type LeaderboardEntry } from "./leaderboard";
+import { useState, useEffect, useRef } from "react";
+import { fetchLeaderboard, saveScore, MAX_NAME_LENGTH, type LeaderboardEntry } from "./leaderboard";
 
 // ── Shared overlay wrapper with fade-in ────────────────────
 function Overlay({ children, bg = "bg-black/50" }: { children: React.ReactNode; bg?: string }) {
@@ -21,7 +21,6 @@ export function StartOverlay({
   const [topEntry, setTopEntry] = useState<{ player_name: string; score: number } | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  // Fetch the #1 score on mount
   useEffect(() => {
     fetchLeaderboard().then((entries) => {
       if (entries.length > 0) setTopEntry(entries[0]);
@@ -36,7 +35,6 @@ export function StartOverlay({
       </h1>
       <p className="text-lg text-white/80 mb-4">Tap anywhere or press Space to jump</p>
 
-      {/* Best score from leaderboard */}
       {loaded && (
         <div className="mb-6 text-white/70 text-sm">
           {topEntry ? (
@@ -85,15 +83,29 @@ export function GameOverOverlay({
   const [name, setName] = useState(localStorage.getItem("frogName") || "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+  // Prevent saving the same run more than once
+  const savedRunRef = useRef(false);
 
   const handleSave = async () => {
-    const trimmed = name.trim().slice(0, 10);
-    if (!trimmed || saving || saved) return;
+    const trimmed = name.trim().slice(0, MAX_NAME_LENGTH);
+    // Guard: empty name, already saving, or already saved this run
+    if (!trimmed) { setError("Please enter a name."); return; }
+    if (saving || saved || savedRunRef.current) return;
+
+    setError("");
     setSaving(true);
     localStorage.setItem("frogName", trimmed);
+
     const ok = await saveScore(trimmed, score);
     setSaving(false);
-    if (ok) setSaved(true);
+
+    if (ok) {
+      savedRunRef.current = true;
+      setSaved(true);
+    } else {
+      setError("Failed to save score. Please try again.");
+    }
   };
 
   return (
@@ -116,18 +128,20 @@ export function GameOverOverlay({
         <div className="flex flex-col items-center gap-2 mb-5">
           <input
             type="text"
-            maxLength={10}
+            maxLength={MAX_NAME_LENGTH}
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Your name"
-            className="w-48 px-4 py-2 rounded-xl bg-white/20 text-white text-center placeholder-white/50 outline-none focus:ring-2 focus:ring-primary backdrop-blur-sm text-lg"
+            className="w-52 px-4 py-2 rounded-xl bg-white/20 text-white text-center placeholder-white/50 outline-none focus:ring-2 focus:ring-primary backdrop-blur-sm text-lg"
             onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
             autoFocus
+            disabled={saving}
           />
+          {error && <p className="text-red-400 text-xs">{error}</p>}
           <button
             onClick={handleSave}
             disabled={!name.trim() || saving}
-            className="px-6 py-2 bg-accent text-accent-foreground rounded-xl font-bold shadow hover:scale-105 active:scale-95 transition-transform disabled:opacity-50 disabled:scale-100"
+            className="px-6 py-2 bg-accent text-accent-foreground rounded-xl font-bold shadow hover:scale-105 active:scale-95 transition-transform disabled:opacity-50 disabled:scale-100 disabled:cursor-not-allowed"
           >
             {saving ? "Saving…" : "Save Score"}
           </button>
@@ -192,7 +206,7 @@ export function LeaderboardOverlay({ onBack }: { onBack: () => void }) {
                   className={`border-b border-white/5 ${i < 3 ? "text-yellow-300" : "text-white/80"}`}
                 >
                   <td className="px-3 py-2 font-bold">{i + 1}</td>
-                  <td className="px-3 py-2 font-medium truncate max-w-[120px]">{e.player_name}</td>
+                  <td className="px-3 py-2 font-medium truncate max-w-[140px]">{e.player_name}</td>
                   <td className="px-3 py-2 text-right font-bold">{e.score.toLocaleString()}</td>
                   <td className="px-3 py-2 text-right text-white/40 hidden sm:table-cell">
                     {new Date(e.created_at).toLocaleDateString()}
