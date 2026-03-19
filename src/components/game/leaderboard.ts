@@ -29,7 +29,7 @@ export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
   return data ?? [];
 }
 
-/** Save a score. Returns true on success. */
+/** Save a score (one entry per name – keeps highest). Returns true on success. */
 export async function saveScore(playerName: string, score: number): Promise<boolean> {
   const trimmed = playerName.trim().slice(0, MAX_NAME_LENGTH);
   if (!trimmed) {
@@ -43,14 +43,45 @@ export async function saveScore(playerName: string, score: number): Promise<bool
 
   console.log("[Leaderboard] Saving:", { name: trimmed, score });
 
+  // Check if this player already has an entry
+  const { data: existing, error: fetchErr } = await supabase
+    .from("leaderboard")
+    .select("id, score")
+    .eq("player_name", trimmed)
+    .maybeSingle();
+
+  if (fetchErr) {
+    console.error("[Leaderboard] Fetch existing failed:", fetchErr.message);
+    return false;
+  }
+
+  if (existing) {
+    // Player already on the board – only update if new score is higher
+    if (score <= existing.score) {
+      console.log("[Leaderboard] Existing score", existing.score, "≥ new", score, "– skipping");
+      return true; // Not an error, just no update needed
+    }
+    const { error: updateErr } = await supabase
+      .from("leaderboard")
+      .update({ score, created_at: new Date().toISOString() })
+      .eq("id", existing.id);
+    if (updateErr) {
+      console.error("[Leaderboard] Update failed:", updateErr.message);
+      return false;
+    }
+    console.log("[Leaderboard] Updated existing entry to score", score);
+    return true;
+  }
+
+  // New player – insert
   const { error } = await supabase
     .from("leaderboard")
     .insert({ player_name: trimmed, score });
 
   if (error) {
-    console.error("[Leaderboard] Save failed:", error.message);
+    console.error("[Leaderboard] Insert failed:", error.message);
     return false;
   }
-  console.log("[Leaderboard] Save success");
+  console.log("[Leaderboard] New entry created");
   return true;
 }
