@@ -56,3 +56,37 @@ export function playSfxGameOver(m: MuteFlag) {
     osc.stop(ctx.currentTime + i * 0.12 + 0.15);
   });
 }
+
+/** Sparkly two-note chime when collecting a coin */
+export function playSfxCoin(m: MuteFlag) {
+  if (m.current) return;
+  const ctx = getSfxCtx();
+  [988, 1319].forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "square";
+    osc.frequency.value = freq;
+    const t = ctx.currentTime + i * 0.07;
+    gain.gain.setValueAtTime(0.06, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.18);
+  });
+}
+
+/** Soft thud when losing a heart */
+export function playSfxHit(m: MuteFlag) {
+  if (m.current) return;
+  const ctx = getSfxCtx();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(220, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(90, ctx.currentTime + 0.2);
+  gain.gain.setValueAtTime(0.2, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start();
+  osc.stop(ctx.currentTime + 0.25);
+}

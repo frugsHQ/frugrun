@@ -1,18 +1,11 @@
 // ── Core gameplay constants ────────────────────────────────
 export const GROUND_RATIO = 0.82;
 export const FROG_W_RATIO = 0.14;
-export const FROG_ASPECT = 1.1;
+export const FROG_ASPECT = 1.0; // new sprite frames are square
 // Fraction of frogH to shift the sprite down (visually sits on ground better)
-export const FROG_Y_OFFSET = 0.12;
+export const FROG_Y_OFFSET = 0.03;
 export const GRAVITY = 0.0018;
 export const JUMP_VEL = -0.85;
-
-// ── Parallax background layers ─────────────────────────────
-export const PARALLAX_LAYERS = [
-  { count: 25, speedFactor: 0.08, yMin: 0.15, yMax: 0.55, alpha: 0.08, lenMin: 30, lenMax: 80 },
-  { count: 20, speedFactor: 0.15, yMin: 0.25, yMax: 0.65, alpha: 0.12, lenMin: 20, lenMax: 60 },
-  { count: 15, speedFactor: 0.25, yMin: 0.35, yMax: 0.75, alpha: 0.18, lenMin: 15, lenMax: 45 },
-];
 
 // ── Endless-mode difficulty ramp config ────────────────────
 export const DIFFICULTY = {
@@ -28,7 +21,13 @@ export const DIFFICULTY = {
 } as const;
 
 // ── Obstacle types ─────────────────────────────────────────
-export type ObstacleKind = "rock" | "snake";
+export type ObstacleKind = "spikes" | "totem";
+
+// ── Coins & lives ──────────────────────────────────────────
+export const COIN_POINTS = 10;      // each coin adds 10 points
+export const COIN_SIZE_RATIO = 0.42; // coin size relative to frog width
+export const START_LIVES = 3;
+export const HIT_INVULN_MS = 1200;   // grace time after losing a heart
 
 // ── Scoring config ─────────────────────────────────────────
 export const SCORING = {
