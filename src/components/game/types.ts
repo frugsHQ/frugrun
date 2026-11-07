@@ -5,6 +5,7 @@ import type { ObstacleKind } from "./constants";
 export interface Coin {
   x: number;
   y: number;      // center
+  previousX?: number;
   phase: number;  // spin offset so coins don't spin in sync
 }
 
@@ -24,11 +25,12 @@ export interface Obstacle {
   x: number;
   w: number;
   h: number;
+  previousX?: number;
   kind: ObstacleKind;
 }
 
 /** All possible screen states */
-export type GameState = "start" | "playing" | "over" | "leaderboard";
+export type GameState = "start" | "playing" | "over" | "leaderboard" | "dying";
 
 /** A milestone message shown briefly on screen */
 export interface MilestoneMsg {

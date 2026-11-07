@@ -1,5 +1,6 @@
 // ── Scene drawing helpers (jungle temple art) ──────────────
 import type { ObstacleKind } from "./constants";
+import { TUNING } from "./motion";
 import type { Coin } from "./types";
 
 import bgSrc from "@/assets/jungle-bg.jpg";
@@ -54,24 +55,29 @@ export const OBSTACLE_ASPECT: Record<ObstacleKind, number> = {
   totem: 256 / 199,
 };
 
+const tileCache = new Map<string, HTMLCanvasElement>();
+
 // ── Draw an image tiled horizontally, mirroring every other tile so seams match ──
 function drawMirroredTiles(
   ctx: CanvasRenderingContext2D, img: HTMLImageElement,
   offset: number, y: number, tileW: number, tileH: number, W: number,
 ) {
-  const period = tileW * 2;
-  const start = -((offset % period) + period) % period;
-  for (let x = start, i = 0; x < W; x += tileW, i++) {
-    if (i % 2 === 0) {
-      ctx.drawImage(img, x, y, tileW + 1, tileH);
-    } else {
-      ctx.save();
-      ctx.translate(x + tileW, y);
-      ctx.scale(-1, 1);
-      ctx.drawImage(img, 0, 0, tileW + 1, tileH);
-      ctx.restore();
-    }
+  // Cache a mirrored pair at its final logical size. No large image resampling per frame.
+  const repeats = Math.max(1, Math.ceil(W / (tileW * 2)));
+  const pairWidth = tileW * 2;
+  const key = `${img.src}:${tileW}:${tileH}:${repeats}`;
+  let cached = tileCache.get(key);
+  if (!cached) {
+    cached = document.createElement('canvas'); cached.width = Math.ceil(pairWidth * repeats); cached.height = Math.ceil(tileH);
+    const off = cached.getContext('2d');
+    if (off) { off.imageSmoothingQuality = 'high'; for (let i = 0; i < repeats; i++) { off.save(); off.translate(i * pairWidth, 0); off.drawImage(img, 0, 0, tileW + 1, tileH); off.translate(pairWidth, 0); off.scale(-1, 1); off.drawImage(img, 0, 0, tileW + 1, tileH); off.restore(); } }
+    if (tileCache.size > 12) tileCache.clear(); tileCache.set(key, cached);
   }
+  const period = pairWidth * repeats;
+  const ratio = Math.hypot(ctx.getTransform().a, ctx.getTransform().b) || 1;
+  const start = Math.round((-((offset % period) + period) % period) * ratio) / ratio;
+  ctx.drawImage(cached, start, y, period + 1, tileH);
+  ctx.drawImage(cached, start + period, y, period + 1, tileH);
 }
 
 // ── Painted jungle background (slow parallax) ──────────────
@@ -87,9 +93,21 @@ export function drawBackground(
     return;
   }
   // Cover the full height, keep aspect ratio
-  const tileH = H;
-  const tileW = Math.max(W, (imgs.bg.naturalWidth / imgs.bg.naturalHeight) * tileH);
-  drawMirroredTiles(ctx, imgs.bg, offset, 0, tileW, tileH, W);
+  const tileH = Math.max(H, W * imgs.bg.naturalHeight / imgs.bg.naturalWidth);
+  const tileW = (imgs.bg.naturalWidth / imgs.bg.naturalHeight) * tileH;
+  drawMirroredTiles(ctx, imgs.bg, offset, H - tileH, tileW, tileH, W);
+  // Reuse near foliage from the original painting, feathered into the far layer.
+  // No replacement artwork: these cached bands create restrained depth.
+  for (let layer = 0; layer < 2; layer++) {
+    ctx.save(); const top = H * (layer === 0 ? 0.65 : 0.78), bottom = H * TUNING.groundRatio;
+    const feather = (bottom - top) / 4;
+    for (let strip = 0; strip < 4; strip++) {
+      ctx.save(); ctx.beginPath(); ctx.rect(0, top + feather * strip, W, feather + 1); ctx.clip();
+      ctx.globalAlpha = (strip + 1) * (layer === 0 ? 0.07 : 0.04);
+      drawMirroredTiles(ctx, imgs.bg, offset * (layer === 0 ? TUNING.parallaxMid : TUNING.parallaxNear) / TUNING.parallaxFar, H - tileH, tileW, tileH, W);
+      ctx.restore();
+    } ctx.restore();
+  }
 }
 
 // ── Mossy carved-stone ground (moves with obstacles) ───────
@@ -97,7 +115,7 @@ export function drawGround(
   ctx: CanvasRenderingContext2D, imgs: GameImages, W: number, groundY: number, H: number, offset: number,
 ) {
   // The tile's grass top sits slightly above groundY so feet sink into the moss
-  const grassLift = (H - groundY) * 0.28;
+  const grassLift = 8;
   const tileH = H - groundY + grassLift;
   if (!ready(imgs.ground)) {
     ctx.fillStyle = "#7a6a4f";
@@ -128,12 +146,12 @@ export function drawObstacle(
 
 // ── Spinning coin: squeeze width with cos() for a 360° flip ──
 export function drawCoin(
-  ctx: CanvasRenderingContext2D, imgs: GameImages, coin: Coin, size: number, time: number,
+  ctx: CanvasRenderingContext2D, imgs: GameImages, coin: Coin, size: number, time: number, renderX = coin.x,
 ) {
   const angle = time * 0.005 + coin.phase;
   const c = Math.cos(angle);
   const w = Math.max(size * 0.08, size * Math.abs(c)); // never fully vanish (coin edge)
-  const x = coin.x - w / 2;
+  const x = renderX - w / 2;
   const y = coin.y - size / 2;
   ctx.save();
   if (ready(imgs.coin)) {
@@ -143,20 +161,20 @@ export function drawCoin(
       ctx.globalAlpha = 0.25;
       ctx.fillStyle = "#7a4a00";
       ctx.beginPath();
-      ctx.ellipse(coin.x, coin.y, w / 2, size / 2, 0, 0, Math.PI * 2);
+      ctx.ellipse(renderX, coin.y, w / 2, size / 2, 0, 0, Math.PI * 2);
       ctx.fill();
     }
   } else {
     ctx.fillStyle = "#ffcc22";
     ctx.beginPath();
-    ctx.ellipse(coin.x, coin.y, w / 2, size / 2, 0, 0, Math.PI * 2);
+    ctx.ellipse(renderX, coin.y, w / 2, size / 2, 0, 0, Math.PI * 2);
     ctx.fill();
   }
   // Gold edge when seen side-on
   if (Math.abs(c) < 0.25) {
     ctx.globalAlpha = 1;
     ctx.fillStyle = "#c98a00";
-    ctx.fillRect(coin.x - size * 0.04, y + size * 0.05, size * 0.08, size * 0.9);
+    ctx.fillRect(renderX - size * 0.04, y + size * 0.05, size * 0.08, size * 0.9);
   }
   ctx.restore();
 }
@@ -178,3 +196,16 @@ export function drawFrogFallback(
 }
 
 export { ready as imageReady };
+
+/** Reuse the top strip of the existing ground art in front of the feet. */
+export function drawForegroundGrass(ctx: CanvasRenderingContext2D, imgs: GameImages, W: number, groundY: number, H: number, offset: number) {
+  ctx.save(); ctx.beginPath(); ctx.rect(0, groundY - 3, W, 12); ctx.clip();
+  drawGround(ctx, imgs, W, groundY, H, offset); ctx.restore();
+}
+
+/** Warm the tile caches before removing the loading screen. */
+export function warmSceneCache(imgs: GameImages, W: number, H: number) {
+  const offscreen = document.createElement('canvas'); offscreen.width = Math.ceil(W); offscreen.height = Math.ceil(H);
+  const ctx = offscreen.getContext('2d'); if (!ctx) return;
+  drawBackground(ctx, imgs, W, H, 0); drawGround(ctx, imgs, W, H * TUNING.groundRatio, H, 0);
+}
