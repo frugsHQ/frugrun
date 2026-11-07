@@ -10,8 +10,7 @@ import coinIconSrc from "@/assets/frug-coin.png";
 
 // ── Modular imports ────────────────────────────────────────
 import {
-  GROUND_RATIO, FROG_W_RATIO, FROG_ASPECT, FROG_Y_OFFSET,
-  GRAVITY, JUMP_VEL, DIFFICULTY, SCORING, MILESTONES,
+  FROG_ASPECT, DIFFICULTY, SCORING, MILESTONES,
   COIN_POINTS, COIN_SIZE_RATIO, START_LIVES, HIT_INVULN_MS,
 } from "./game/constants";
 import type { ObstacleKind } from "./game/constants";
@@ -31,13 +30,11 @@ export default function FrogRunner() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgsRef = useRef<GameImages | null>(null);
   const runFrameRef = useRef(0);
-  const runTimerRef = useRef(0);
   const dustRef = useRef<DustParticle[]>([]);
   const sparkleRef = useRef<DustParticle[]>([]);
   const shakeRef = useRef(0);
   const milestoneRef = useRef<MilestoneMsg | null>(null);
   const triggeredMilestonesRef = useRef<Set<number>>(new Set());
-  const idleIdRef = useRef(0);
 
   // HUD DOM refs (updated directly to avoid React re-renders each frame)
   const scoreElRef = useRef<HTMLSpanElement>(null);
@@ -53,6 +50,7 @@ export default function FrogRunner() {
   const pausedRef = useRef(false);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const input = useRef({ held: false, heldMs: 0, buffer: 0, coyote: 0 });
+  const comboTween = useRef(1);
   const clock = useRef({ accumulator: 0, last: 0, hud: 0, fps: 60, frameMs: 0 });
   const [debug, setDebug] = useState(false);
   const debugRef = useRef(false);
@@ -121,7 +119,7 @@ export default function FrogRunner() {
     const w = container.clientWidth, h = container.clientHeight;
     const dpr = Math.min(TUNING.dprCap, window.devicePixelRatio || 1);
     const portrait = w / h < 0.8;
-    const logicalW = portrait ? TUNING.portraitWidth : Math.max(TUNING.landscapeMinWidth, TUNING.logicalHeight * w / h);
+    const logicalW = portrait ? TUNING.logicalHeight * w / h : TUNING.desktopWidth;
     const scale = Math.min(w / logicalW, h / TUNING.logicalHeight);
     view.current = { width: logicalW, height: TUNING.logicalHeight, scale, dpr, x: (w - logicalW * scale) / 2, y: (h - TUNING.logicalHeight * scale) / 2 };
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
@@ -310,7 +308,11 @@ export default function FrogRunner() {
     for (const ob of s.obstacles) ob.previousX = ob.x;
     for (const coin of s.coinList) coin.previousX = coin.x;
     const { W, groundY, frogW, frogH, frogX, restY, scale } = geom();
-    if (s.gameState === 'dying') { s.deathTimer -= dt; if (s.deathTimer <= 0) endGame(); return; }
+    if (s.gameState === 'dying') { s.deathTimer -= dt;
+      const move = getDifficulty(s.elapsed).speed * dt * TUNING.deathSlowdown;
+      s.groundOffset += move; s.bgOffset += move * TUNING.parallaxFar;
+      for (const ob of s.obstacles) ob.x -= move; for (const coin of s.coinList) coin.x -= move;
+      if (s.deathTimer <= 0) endGame(); return; }
     if (s.gameState !== 'playing') { if (s.gameState === 'start' || s.gameState === 'leaderboard') {
       s.frogY = restY; previous.current.frogY = restY; s.onGround = true;
       s.groundOffset += DIFFICULTY.startSpeed * dt * 0.6; s.bgOffset += DIFFICULTY.startSpeed * dt * 0.05;
@@ -321,7 +323,7 @@ export default function FrogRunner() {
 
     // Scroll the world
     s.groundOffset += speed * dt;
-    s.bgOffset += speed * dt * 0.08;
+    s.bgOffset += speed * dt * TUNING.parallaxFar;
 
     // Survival score
     s.survivalAccum += (dt / 1000) * SCORING.survivalPointsPerSec * s.combo;
@@ -334,9 +336,7 @@ export default function FrogRunner() {
       s.displayScore = Math.min(s.score, s.displayScore + Math.max(1, Math.ceil((s.score - s.displayScore) * 0.15)));
     }
 
-    // ── Frog physics (unchanged) ──
-    // Velocity is in "phone-width" units and scaled once to pixels, so the
-    // jump arc looks the same on any screen width (identical on phones).
+    // Variable jump in logical pixels: a held press adds lift, release cuts ascent.
     const controls = input.current;
     controls.buffer = Math.max(0, controls.buffer - dt);
     controls.coyote = s.onGround ? TUNING.coyoteMs : Math.max(0, controls.coyote - dt);
@@ -496,13 +496,16 @@ export default function FrogRunner() {
       ctx.save();
       if (shakeRef.current > 0 && !pausedRef.current) { shakeRef.current = Math.max(0, shakeRef.current - dt); const amplitude = shakeRef.current / 300 * 7;
         ctx.translate(Math.sin(time * 0.12) * amplitude, Math.cos(time * 0.15) * amplitude); }
-      drawScene(ctx, pausedRef.current ? 1 : c.accumulator / TUNING.stepMs); ctx.restore();
+      drawScene(ctx, pausedRef.current ? 1 : c.accumulator / TUNING.stepMs);
+      if (stateRef.current.gameState === 'dying') { ctx.globalAlpha = stateRef.current.deathTimer / TUNING.deathMs * 0.22; ctx.fillStyle = canvasColors.current.coin; ctx.fillRect(0, 0, view.current.width, view.current.height); }
+      ctx.restore();
       c.hud += dt;
       if (c.hud >= TUNING.hudMs) { c.hud = 0; const s = stateRef.current;
         if (scoreElRef.current) scoreElRef.current.textContent = String(s.displayScore);
         if (coinsElRef.current) coinsElRef.current.textContent = String(s.coins);
         if (bestElRef.current) bestElRef.current.textContent = String(Math.max(s.bestScore, s.score));
-        if (comboElRef.current) comboElRef.current.textContent = '×' + s.combo.toFixed(1);
+        comboTween.current += (s.combo - comboTween.current) * 0.35;
+        if (comboElRef.current) { comboElRef.current.textContent = '×' + comboTween.current.toFixed(1); comboElRef.current.style.setProperty('--combo-fill', String((comboTween.current - 1) / 2)); }
         if (debugElRef.current) debugElRef.current.textContent = `${Math.round(c.fps)} FPS · ${c.frameMs.toFixed(1)} ms`;
       }
       id = requestAnimationFrame(tick);
@@ -512,8 +515,9 @@ export default function FrogRunner() {
 
   // ── Start / restart ──
   const startGame = useCallback(() => {
+    if (!ready) return;
     const s = stateRef.current;
-
+    pausedRef.current = false; setPaused(false);
     s.gameState = "playing";
     s.score = 0; s.displayScore = 0;
     s.combo = 1.0; s.peakCombo = 1.0;

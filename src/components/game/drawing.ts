@@ -62,16 +62,17 @@ function drawMirroredTiles(
   offset: number, y: number, tileW: number, tileH: number, W: number,
 ) {
   // Cache a mirrored pair at its final logical size. No large image resampling per frame.
-  const key = `${img.src}:${tileW}:${tileH}`;
+  const repeats = Math.max(1, Math.ceil(W / (tileW * 2)));
+  const pairWidth = tileW * 2;
+  const key = `${img.src}:${tileW}:${tileH}:${repeats}`;
   let cached = tileCache.get(key);
   if (!cached) {
-    cached = document.createElement('canvas'); cached.width = Math.ceil(tileW * 2); cached.height = Math.ceil(tileH);
+    cached = document.createElement('canvas'); cached.width = Math.ceil(pairWidth * repeats); cached.height = Math.ceil(tileH);
     const off = cached.getContext('2d');
-    if (off) { off.imageSmoothingQuality = 'high'; off.drawImage(img, 0, 0, tileW + 1, tileH);
-      off.translate(tileW * 2, 0); off.scale(-1, 1); off.drawImage(img, 0, 0, tileW + 1, tileH); }
+    if (off) { off.imageSmoothingQuality = 'high'; for (let i = 0; i < repeats; i++) { off.save(); off.translate(i * pairWidth, 0); off.drawImage(img, 0, 0, tileW + 1, tileH); off.translate(pairWidth, 0); off.scale(-1, 1); off.drawImage(img, 0, 0, tileW + 1, tileH); off.restore(); } }
     if (tileCache.size > 12) tileCache.clear(); tileCache.set(key, cached);
   }
-  const period = tileW * 2;
+  const period = pairWidth * repeats;
   const start = -((offset % period) + period) % period;
   ctx.drawImage(cached, start, y, period + 1, tileH);
   ctx.drawImage(cached, start + period, y, period + 1, tileH);
@@ -90,9 +91,9 @@ export function drawBackground(
     return;
   }
   // Cover the full height, keep aspect ratio
-  const tileH = H;
-  const tileW = Math.max(W, (imgs.bg.naturalWidth / imgs.bg.naturalHeight) * tileH);
-  drawMirroredTiles(ctx, imgs.bg, offset, 0, tileW, tileH, W);
+  const tileH = Math.max(H, W * imgs.bg.naturalHeight / imgs.bg.naturalWidth);
+  const tileW = (imgs.bg.naturalWidth / imgs.bg.naturalHeight) * tileH;
+  drawMirroredTiles(ctx, imgs.bg, offset, H - tileH, tileW, tileH, W);
 }
 
 // ── Mossy carved-stone ground (moves with obstacles) ───────

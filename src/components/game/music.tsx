@@ -26,13 +26,20 @@ export function MusicPlayer({ gameOver, mutedRef }: { gameOver: boolean; mutedRe
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const fade = useRef(0);
+  const fadingIn = useRef(false);
   function applyVolume() {
     if (audio.current) { audio.current.muted = mutedRef.current; audio.current.volume = volumeRef.current * (duck.current ? AUDIO_TUNING.duck : 1); }
   }
   function start() {
     const a = audio.current;
     if (!a || manualPause.current || document.hidden) return;
-    a.play().then(() => { setBlocked(false); setPlaying(true); }).catch(() => { setBlocked(true); setPlaying(false); });
+    const wasPaused = a.paused;
+    a.play().then(() => { setBlocked(false); setPlaying(true);
+      if (wasPaused && !fadingIn.current) { fadingIn.current = true; cancelAnimationFrame(fade.current); a.volume = 0;
+        const began = performance.now(); const tick = (now: number) => { const t = Math.min(1, (now - began) / AUDIO_TUNING.fadeMs);
+          a.volume = volumeRef.current * (duck.current ? AUDIO_TUNING.duck : 1) * t;
+          if (t < 1) fade.current = requestAnimationFrame(tick); else fadingIn.current = false; }; fade.current = requestAnimationFrame(tick); }
+    }).catch(() => { setBlocked(true); setPlaying(false); });
   }
   function toggleMute() {
     mutedRef.current = !mutedRef.current;
@@ -45,7 +52,7 @@ export function MusicPlayer({ gameOver, mutedRef }: { gameOver: boolean; mutedRe
     const next = () => setTrack(t => (t + 1) % TRACKS.length);
     a.addEventListener('timeupdate', update); a.addEventListener('loadedmetadata', update); a.addEventListener('ended', next);
     a.addEventListener('pause', () => setPlaying(false));
-    const gesture = () => { unlockSfx(); if (a.paused && !manualPause.current) start(); };
+    const gesture = (e: Event) => { unlockSfx(); if (e.target instanceof HTMLElement && e.target.closest('[aria-label="Play music"], [aria-label="Pause music"]')) return; if (a.paused && !manualPause.current) start(); };
     const keys = (e: KeyboardEvent) => { if (e.code === 'KeyM' && !e.repeat && !(e.target instanceof HTMLInputElement)) { e.preventDefault(); toggleMute(); } };
     const visibility = () => { if (document.hidden) a.pause(); else start(); };
     window.addEventListener('pointerdown', gesture, true); window.addEventListener('keydown', gesture, true);
@@ -58,6 +65,7 @@ export function MusicPlayer({ gameOver, mutedRef }: { gameOver: boolean; mutedRe
   useEffect(() => {
     const a = audio.current; if (!a) return;
     cancelAnimationFrame(fade.current);
+    fadingIn.current = false;
     const from = a.volume, target = volumeRef.current * (gameOver ? AUDIO_TUNING.duck : 1), began = performance.now();
     const tick = (now: number) => { const t = Math.min(1, (now - began) / AUDIO_TUNING.fadeMs); a.volume = from + (target - from) * t; if (t < 1) fade.current = requestAnimationFrame(tick); };
     fade.current = requestAnimationFrame(tick);

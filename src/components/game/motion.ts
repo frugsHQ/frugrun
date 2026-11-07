@@ -6,7 +6,7 @@ export const TUNING = {
   shortHopHeights: 1.2, bigHopHeights: 2.4, holdMs: 180,
   jumpCut: 0.45, fallGravity: 1.4, holdGravity: 0.38,
   coyoteMs: 90, bufferMs: 110, landingMs: 100, hudClearance: 150,
-  gravity: 0.0036, runStride: 100, deathMs: 250,
+  gravity: 0.0036, runStride: 100, deathMs: 250, deathSlowdown: 0.25,
   obstaclePool: 40, coinPool: 120, particlePool: 160,
   playerWidth: 0.52, playerHeight: 0.60,
   playerPadX: 0.30, playerPadY: 0.35, obstacleInset: 0.10,
