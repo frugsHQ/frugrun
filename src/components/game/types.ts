@@ -1,12 +1,11 @@
 // ── Game Types ─────────────────────────────────────────────
 import type { ObstacleKind } from "./constants";
 
-/** A single parallax background line */
-export interface ParallaxLine {
+/** A spinning collectible coin */
+export interface Coin {
   x: number;
-  y: number;
-  len: number;
-  layer: number;
+  y: number;      // center
+  phase: number;  // spin offset so coins don't spin in sync
 }
 
 /** A dust/landing particle */

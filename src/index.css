@@ -6,13 +6,13 @@
   :root {
     --background: 142 40% 12%;
     --foreground: 80 60% 95%;
-    --primary: 142 60% 45%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 142 30% 20%;
-    --secondary-foreground: 80 60% 90%;
+    --primary: 88 85% 48%;
+    --primary-foreground: 25 60% 12%;
+    --secondary: 275 60% 48%;
+    --secondary-foreground: 0 0% 100%;
     --muted: 142 20% 18%;
     --muted-foreground: 80 20% 60%;
-    --accent: 50 80% 55%;
+    --accent: 48 100% 58%;
     --accent-foreground: 142 40% 10%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
@@ -20,8 +20,10 @@
     --input: 142 20% 25%;
     --ring: 142 60% 45%;
     --radius: 0.75rem;
-    --card: 142 35% 15%;
-    --card-foreground: 80 60% 95%;
+    --card: 25 50% 20%;
+    --card-foreground: 40 60% 94%;
+    --wood-light: 28 55% 35%;
+    --wood-dark: 22 55% 14%;
     --popover: 142 35% 15%;
     --popover-foreground: 80 60% 95%;
   }
@@ -53,3 +55,13 @@
 .animate-fade-in {
   animation: fade-in 0.3s ease-out both;
 }
+
+/* ── Jungle temple UI helpers ── */
+.font-display { font-family: "Lilita One", system-ui, sans-serif; letter-spacing: 0.02em; }
+.text-outline { text-shadow: 0 2px 0 hsl(var(--wood-dark)), 0 0 6px hsl(var(--wood-dark) / 0.8); }
+.wood-card {
+  background: linear-gradient(180deg, hsl(var(--wood-light)), hsl(var(--card)));
+  border: 4px solid hsl(var(--wood-dark));
+  box-shadow: inset 0 2px 0 hsl(var(--accent) / 0.25), 0 10px 30px hsl(var(--wood-dark) / 0.6);
+}
+.hud-panel { background-size: 100% 100%; background-repeat: no-repeat; }
