@@ -152,3 +152,4 @@ html, body, #root { overscroll-behavior: none; touch-action: none; }
   .is-expanded .music-bar > :not(:first-child) { display: flex; }
   .game-menu { max-height: calc(100cqh - 85px); }
 }
+@media (min-width: 1600px) { .hud-stats { font-size: 28px; padding: 10px 20px; } .hud-score img { width: 140px; height: 48px; } .hud-coins img { width: 36px; height: 36px; } .hud-secondary { font-size: 26px; } .music-player { width: 320px; } .music-title { font-size: 14px; } }

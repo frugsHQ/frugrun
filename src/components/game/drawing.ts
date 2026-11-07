@@ -1,5 +1,6 @@
 // ── Scene drawing helpers (jungle temple art) ──────────────
 import type { ObstacleKind } from "./constants";
+import { TUNING } from "./motion";
 import type { Coin } from "./types";
 
 import bgSrc from "@/assets/jungle-bg.jpg";
@@ -73,7 +74,8 @@ function drawMirroredTiles(
     if (tileCache.size > 12) tileCache.clear(); tileCache.set(key, cached);
   }
   const period = pairWidth * repeats;
-  const start = -((offset % period) + period) % period;
+  const ratio = Math.hypot(ctx.getTransform().a, ctx.getTransform().b) || 1;
+  const start = Math.round((-((offset % period) + period) % period) * ratio) / ratio;
   ctx.drawImage(cached, start, y, period + 1, tileH);
   ctx.drawImage(cached, start + period, y, period + 1, tileH);
 }
@@ -94,6 +96,18 @@ export function drawBackground(
   const tileH = Math.max(H, W * imgs.bg.naturalHeight / imgs.bg.naturalWidth);
   const tileW = (imgs.bg.naturalWidth / imgs.bg.naturalHeight) * tileH;
   drawMirroredTiles(ctx, imgs.bg, offset, H - tileH, tileW, tileH, W);
+  // Reuse near foliage from the original painting, feathered into the far layer.
+  // No replacement artwork: these cached bands create restrained depth.
+  for (let layer = 0; layer < 2; layer++) {
+    ctx.save(); const top = H * (layer === 0 ? 0.65 : 0.78), bottom = H * TUNING.groundRatio;
+    const feather = (bottom - top) / 4;
+    for (let strip = 0; strip < 4; strip++) {
+      ctx.save(); ctx.beginPath(); ctx.rect(0, top + feather * strip, W, feather + 1); ctx.clip();
+      ctx.globalAlpha = (strip + 1) * (layer === 0 ? 0.07 : 0.04);
+      drawMirroredTiles(ctx, imgs.bg, offset * (layer === 0 ? TUNING.parallaxMid : TUNING.parallaxNear) / TUNING.parallaxFar, H - tileH, tileW, tileH, W);
+      ctx.restore();
+    } ctx.restore();
+  }
 }
 
 // ── Mossy carved-stone ground (moves with obstacles) ───────
@@ -187,4 +201,11 @@ export { ready as imageReady };
 export function drawForegroundGrass(ctx: CanvasRenderingContext2D, imgs: GameImages, W: number, groundY: number, H: number, offset: number) {
   ctx.save(); ctx.beginPath(); ctx.rect(0, groundY - 3, W, 12); ctx.clip();
   drawGround(ctx, imgs, W, groundY, H, offset); ctx.restore();
+}
+
+/** Warm the tile caches before removing the loading screen. */
+export function warmSceneCache(imgs: GameImages, W: number, H: number) {
+  const offscreen = document.createElement('canvas'); offscreen.width = Math.ceil(W); offscreen.height = Math.ceil(H);
+  const ctx = offscreen.getContext('2d'); if (!ctx) return;
+  drawBackground(ctx, imgs, W, H, 0); drawGround(ctx, imgs, W, H * TUNING.groundRatio, H, 0);
 }

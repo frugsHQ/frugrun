@@ -16,7 +16,7 @@ import {
 import type { ObstacleKind } from "./game/constants";
 import type { DustParticle, Obstacle, GameState, MilestoneMsg, Coin } from "./game/types";
 import {
-  loadGameImages, drawBackground, drawGround, drawForegroundGrass, drawObstacle, drawCoin,
+  loadGameImages, drawBackground, drawGround, drawForegroundGrass, warmSceneCache, drawObstacle, drawCoin,
   drawFrogFallback, imageReady, OBSTACLE_ASPECT, type GameImages,
 } from "./game/drawing";
 import { playSfxJump, playSfxScore, playSfxGameOver, playSfxCoin, playSfxHit } from "./game/sfx";
@@ -61,8 +61,8 @@ export default function FrogRunner() {
   const coinPool = useRef(Array.from({ length: TUNING.coinPool }, () => ({ x: 0, y: 0, phase: 0, previousX: 0 })));
   const popups = useRef(Array.from({ length: 12 }, () => ({ x: 0, y: 0, life: 0 })));
   const particle = (list: DustParticle[], value: DustParticle) => { const p = particlePool.current.find(p => p.life <= 0); if (p) { Object.assign(p, value); list.push(p); } };
-  const addObstacle = (value: Obstacle) => { const p = obstaclePool.current.find(p => !stateRef.current.obstacles.includes(p)); if (p) { Object.assign(p, value, { previousX: value.x }); stateRef.current.obstacles.push(p); } };
-  const addCoin = (value: Coin) => { const p = coinPool.current.find(p => !stateRef.current.coinList.includes(p)); if (p) { Object.assign(p, value, { previousX: value.x }); stateRef.current.coinList.push(p); } };
+  const addObstacle = (x: number, w: number, h: number, kind: ObstacleKind) => { const p = obstaclePool.current.find(p => !stateRef.current.obstacles.includes(p)); if (p) { p.x = x; p.previousX = x; p.w = w; p.h = h; p.kind = kind; stateRef.current.obstacles.push(p); } };
+  const addCoin = (x: number, y: number, phase: number) => { const p = coinPool.current.find(p => !stateRef.current.coinList.includes(p)); if (p) { p.x = x; p.previousX = x; p.y = y; p.phase = phase; stateRef.current.coinList.push(p); } };
 
   // ── Core game state (ref to avoid re-renders during loop) ──
   const stateRef = useRef({
@@ -105,8 +105,8 @@ export default function FrogRunner() {
   // ── Load all images once ──
   useEffect(() => { let active = true; const images = loadGameImages();
     Promise.all([images.bg, images.ground, images.spikes, images.totem, images.coin, ...images.run, images.jump, images.fall].map(img => img.decode())).then(() => {
-      if (active) { imgsRef.current = images; setReady(true); }
-    }).catch(() => { if (active) { imgsRef.current = images; setReady(true); } });
+      if (active) { imgsRef.current = images; warmSceneCache(images, stateRef.current.canvasW, stateRef.current.canvasH); setReady(true); }
+    }).catch(() => { if (active) { imgsRef.current = images; warmSceneCache(images, stateRef.current.canvasW, stateRef.current.canvasH); setReady(true); } });
     return () => { active = false; };
   }, []);
 
@@ -130,6 +130,7 @@ export default function FrogRunner() {
     stateRef.current.canvasW = logicalW; stateRef.current.canvasH = TUNING.logicalHeight;
     if (stateRef.current.onGround) stateRef.current.frogY = geom().restY;
     previous.current.frogY = stateRef.current.frogY;
+    if (imgsRef.current) warmSceneCache(imgsRef.current, logicalW, TUNING.logicalHeight);
   }, []);
 
   function getDifficulty(elapsed: number) { return difficultyAt(elapsed, DIFFICULTY); }
@@ -286,6 +287,7 @@ export default function FrogRunner() {
   // ── Game over ──
   const endGame = useCallback(() => {
     const s = stateRef.current;
+    milestoneRef.current = null;
     s.gameState = "over";
     shakeRef.current = 300;
     playSfxGameOver(mutedRef);
@@ -342,7 +344,7 @@ export default function FrogRunner() {
     controls.coyote = s.onGround ? TUNING.coyoteMs : Math.max(0, controls.coyote - dt);
     if (controls.buffer > 0 && (s.onGround || controls.coyote > 0)) {
       controls.buffer = 0; controls.coyote = 0; controls.heldMs = 0;
-      s.frogVY = jumpVelocity(); s.onGround = false; playSfxJump(mutedRef);
+      s.frogVY = jumpVelocity() * (controls.held ? 1 : TUNING.jumpCut); s.onGround = false; playSfxJump(mutedRef);
     }
     controls.heldMs += dt;
     const motion = advanceJump(s.frogY, s.frogVY, restY, controls.held, controls.heldMs, dt);
@@ -382,7 +384,7 @@ export default function FrogRunner() {
       const oh = frogH * (0.5 + Math.random() * 0.4);
       const ow = oh / OBSTACLE_ASPECT[kind];
       const ox = W + 10;
-      addObstacle({ x: ox, w: ow, h: oh, kind });
+      addObstacle(ox, ow, oh, kind);
 
       const coinSize = frogW * COIN_SIZE_RATIO;
       const r = Math.random();
@@ -390,11 +392,7 @@ export default function FrogRunner() {
         // Arc of 3 coins over the obstacle — rewards a good jump
         const peak = groundY - oh - coinSize * 1.1;
         for (let i = -1; i <= 1; i++) {
-          addCoin({
-            x: ox + ow / 2 + i * coinSize * 1.3,
-            y: peak + Math.abs(i) * coinSize * 0.5,
-            phase: i * 0.6,
-          });
+          addCoin(ox + ow / 2 + i * coinSize * 1.3, peak + Math.abs(i) * coinSize * 0.5, i * 0.6);
         }
       } else if (r < 0.85) {
         // Row of coins on the ground, halfway to the next obstacle
@@ -402,7 +400,7 @@ export default function FrogRunner() {
         if (gap > coinSize * 5) {
           const startX = ox + ow + gap * 0.5 - coinSize * 1.3;
           for (let i = 0; i < 3; i++) {
-            addCoin({ x: startX + i * coinSize * 1.3, y: groundY - coinSize * 0.75, phase: i * 0.6 });
+            addCoin(startX + i * coinSize * 1.3, groundY - coinSize * 0.75, i * 0.6);
           }
         }
       }
@@ -493,7 +491,7 @@ export default function FrogRunner() {
         c.accumulator += dt;
         while (c.accumulator >= TUNING.stepMs) { simulate(TUNING.stepMs); c.accumulator -= TUNING.stepMs; }
       } else c.accumulator = 0;
-      ctx.save();
+      ctx.save(); ctx.beginPath(); ctx.rect(0, 0, view.current.width, view.current.height); ctx.clip();
       if (shakeRef.current > 0 && !pausedRef.current) { shakeRef.current = Math.max(0, shakeRef.current - dt); const amplitude = shakeRef.current / 300 * 7;
         ctx.translate(Math.sin(time * 0.12) * amplitude, Math.cos(time * 0.15) * amplitude); }
       drawScene(ctx, pausedRef.current ? 1 : c.accumulator / TUNING.stepMs);
