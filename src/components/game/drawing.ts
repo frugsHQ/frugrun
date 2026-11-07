@@ -54,24 +54,27 @@ export const OBSTACLE_ASPECT: Record<ObstacleKind, number> = {
   totem: 256 / 199,
 };
 
+const tileCache = new Map<string, HTMLCanvasElement>();
+
 // ── Draw an image tiled horizontally, mirroring every other tile so seams match ──
 function drawMirroredTiles(
   ctx: CanvasRenderingContext2D, img: HTMLImageElement,
   offset: number, y: number, tileW: number, tileH: number, W: number,
 ) {
+  // Cache a mirrored pair at its final logical size. No large image resampling per frame.
+  const key = `${img.src}:${tileW}:${tileH}`;
+  let cached = tileCache.get(key);
+  if (!cached) {
+    cached = document.createElement('canvas'); cached.width = Math.ceil(tileW * 2); cached.height = Math.ceil(tileH);
+    const off = cached.getContext('2d');
+    if (off) { off.imageSmoothingQuality = 'high'; off.drawImage(img, 0, 0, tileW + 1, tileH);
+      off.translate(tileW * 2, 0); off.scale(-1, 1); off.drawImage(img, 0, 0, tileW + 1, tileH); }
+    if (tileCache.size > 12) tileCache.clear(); tileCache.set(key, cached);
+  }
   const period = tileW * 2;
   const start = -((offset % period) + period) % period;
-  for (let x = start, i = 0; x < W; x += tileW, i++) {
-    if (i % 2 === 0) {
-      ctx.drawImage(img, x, y, tileW + 1, tileH);
-    } else {
-      ctx.save();
-      ctx.translate(x + tileW, y);
-      ctx.scale(-1, 1);
-      ctx.drawImage(img, 0, 0, tileW + 1, tileH);
-      ctx.restore();
-    }
-  }
+  ctx.drawImage(cached, start, y, period + 1, tileH);
+  ctx.drawImage(cached, start + period, y, period + 1, tileH);
 }
 
 // ── Painted jungle background (slow parallax) ──────────────
@@ -97,7 +100,7 @@ export function drawGround(
   ctx: CanvasRenderingContext2D, imgs: GameImages, W: number, groundY: number, H: number, offset: number,
 ) {
   // The tile's grass top sits slightly above groundY so feet sink into the moss
-  const grassLift = (H - groundY) * 0.28;
+  const grassLift = 8;
   const tileH = H - groundY + grassLift;
   if (!ready(imgs.ground)) {
     ctx.fillStyle = "#7a6a4f";
@@ -128,12 +131,12 @@ export function drawObstacle(
 
 // ── Spinning coin: squeeze width with cos() for a 360° flip ──
 export function drawCoin(
-  ctx: CanvasRenderingContext2D, imgs: GameImages, coin: Coin, size: number, time: number,
+  ctx: CanvasRenderingContext2D, imgs: GameImages, coin: Coin, size: number, time: number, renderX = coin.x,
 ) {
   const angle = time * 0.005 + coin.phase;
   const c = Math.cos(angle);
   const w = Math.max(size * 0.08, size * Math.abs(c)); // never fully vanish (coin edge)
-  const x = coin.x - w / 2;
+  const x = renderX - w / 2;
   const y = coin.y - size / 2;
   ctx.save();
   if (ready(imgs.coin)) {
@@ -143,20 +146,20 @@ export function drawCoin(
       ctx.globalAlpha = 0.25;
       ctx.fillStyle = "#7a4a00";
       ctx.beginPath();
-      ctx.ellipse(coin.x, coin.y, w / 2, size / 2, 0, 0, Math.PI * 2);
+      ctx.ellipse(renderX, coin.y, w / 2, size / 2, 0, 0, Math.PI * 2);
       ctx.fill();
     }
   } else {
     ctx.fillStyle = "#ffcc22";
     ctx.beginPath();
-    ctx.ellipse(coin.x, coin.y, w / 2, size / 2, 0, 0, Math.PI * 2);
+    ctx.ellipse(renderX, coin.y, w / 2, size / 2, 0, 0, Math.PI * 2);
     ctx.fill();
   }
   // Gold edge when seen side-on
   if (Math.abs(c) < 0.25) {
     ctx.globalAlpha = 1;
     ctx.fillStyle = "#c98a00";
-    ctx.fillRect(coin.x - size * 0.04, y + size * 0.05, size * 0.08, size * 0.9);
+    ctx.fillRect(renderX - size * 0.04, y + size * 0.05, size * 0.08, size * 0.9);
   }
   ctx.restore();
 }
@@ -178,3 +181,9 @@ export function drawFrogFallback(
 }
 
 export { ready as imageReady };
+
+/** Reuse the top strip of the existing ground art in front of the feet. */
+export function drawForegroundGrass(ctx: CanvasRenderingContext2D, imgs: GameImages, W: number, groundY: number, H: number, offset: number) {
+  ctx.save(); ctx.beginPath(); ctx.rect(0, groundY - 3, W, 12); ctx.clip();
+  drawGround(ctx, imgs, W, groundY, H, offset); ctx.restore();
+}
