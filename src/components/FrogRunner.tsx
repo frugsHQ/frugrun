@@ -243,7 +243,7 @@ export default function FrogRunner() {
     let sx = 1, sy = 1, rot = 0;
     if (!s.onGround) {
       sx = 0.96; sy = 1.05;
-      rot = Math.max(-0.12, Math.min(0.12, s.frogVY * 0.08));
+      rot = Math.max(-0.12, Math.min(0.12, s.frogVY * 0.15));
     } else if (s.squashTimer > 0) {
       const t = s.squashTimer / 100;
       sx = 1 + 0.08 * t; sy = 1 - 0.07 * t;
@@ -357,7 +357,9 @@ export default function FrogRunner() {
     }
 
     // ── Frog physics (unchanged) ──
-    s.frogVY += GRAVITY * scale * dt;
+    // Velocity is in "phone-width" units and scaled once to pixels, so the
+    // jump arc looks the same on any screen width (identical on phones).
+    s.frogVY += GRAVITY * dt;
     s.frogY += s.frogVY * scale * dt;
     if (s.frogY >= restY) {
       const landed = !s.onGround;
@@ -590,7 +592,7 @@ export default function FrogRunner() {
     if (s.gameState === "start") { startGame(); return; }
     if (s.gameState !== "playing" || !s.onGround) return;
     const { groundY, frogW, frogX, scale } = geom();
-    s.frogVY = JUMP_VEL * scale;
+    s.frogVY = JUMP_VEL;
     s.onGround = false;
     playSfxJump(mutedRef);
     for (let i = 0; i < 5; i++) {
