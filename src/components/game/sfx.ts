@@ -6,6 +6,10 @@ function getSfxCtx() {
   return sfxCtx;
 }
 
+export function unlockSfx() { void getSfxCtx().resume(); }
+
+const SFX_VOLUME = 0.7; // independent of the music volume
+
 type MuteFlag = { current: boolean };
 
 /** Rising sine chirp on jump */
@@ -17,7 +21,7 @@ export function playSfxJump(m: MuteFlag) {
   osc.type = "sine";
   osc.frequency.setValueAtTime(400, ctx.currentTime);
   osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.15);
-  gain.gain.setValueAtTime(0.15, ctx.currentTime);
+  gain.gain.setValueAtTime(0.15 * SFX_VOLUME, ctx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
   osc.connect(gain).connect(ctx.destination);
   osc.start();
@@ -33,7 +37,7 @@ export function playSfxScore(m: MuteFlag) {
   osc.type = "triangle";
   osc.frequency.setValueAtTime(600, ctx.currentTime);
   osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
-  gain.gain.setValueAtTime(0.12, ctx.currentTime);
+  gain.gain.setValueAtTime(0.12 * SFX_VOLUME, ctx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
   osc.connect(gain).connect(ctx.destination);
   osc.start();
@@ -49,7 +53,7 @@ export function playSfxGameOver(m: MuteFlag) {
     const gain = ctx.createGain();
     osc.type = "square";
     osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0.1, ctx.currentTime + i * 0.12);
+    gain.gain.setValueAtTime(0.1 * SFX_VOLUME, ctx.currentTime + i * 0.12);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.12 + 0.15);
     osc.connect(gain).connect(ctx.destination);
     osc.start(ctx.currentTime + i * 0.12);
@@ -67,7 +71,7 @@ export function playSfxCoin(m: MuteFlag) {
     osc.type = "square";
     osc.frequency.value = freq;
     const t = ctx.currentTime + i * 0.07;
-    gain.gain.setValueAtTime(0.06, t);
+    gain.gain.setValueAtTime(0.06 * SFX_VOLUME, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
     osc.connect(gain).connect(ctx.destination);
     osc.start(t);
@@ -84,7 +88,7 @@ export function playSfxHit(m: MuteFlag) {
   osc.type = "triangle";
   osc.frequency.setValueAtTime(220, ctx.currentTime);
   osc.frequency.exponentialRampToValueAtTime(90, ctx.currentTime + 0.2);
-  gain.gain.setValueAtTime(0.2, ctx.currentTime);
+  gain.gain.setValueAtTime(0.2 * SFX_VOLUME, ctx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
   osc.connect(gain).connect(ctx.destination);
   osc.start();
