@@ -2,8 +2,10 @@
 import type { ObstacleKind } from "./constants";
 import { TUNING } from "./motion";
 import type { Coin } from "./types";
+import { normalizeFrame, prepareObstacle } from './sprites';
 
-import bgSrc from "@/assets/jungle-bg.jpg";
+import bgSrc from "@/assets/jungle-frog-statue.png";
+export { bgSrc as BACKGROUND_SRC };
 import groundSrc from "@/assets/ground-tile.jpg";
 import spikesSrc from "@/assets/obstacle-spikes.png";
 import totemSrc from "@/assets/obstacle-totem.png";
@@ -21,9 +23,9 @@ export interface GameImages {
   spikes: HTMLImageElement;
   totem: HTMLImageElement;
   coin: HTMLImageElement;
-  run: HTMLImageElement[]; // run cycle frames
-  jump: HTMLImageElement;
-  fall: HTMLImageElement;
+  run: (HTMLImageElement | HTMLCanvasElement)[]; // normalized run cycle frames
+  jump: HTMLImageElement | HTMLCanvasElement;
+  fall: HTMLImageElement | HTMLCanvasElement;
 }
 
 function load(src: string) {
@@ -47,7 +49,26 @@ export function loadGameImages(): GameImages {
   };
 }
 
-const ready = (img: HTMLImageElement) => img.complete && img.naturalWidth > 0;
+const ready = (img: HTMLImageElement | HTMLCanvasElement) => img instanceof HTMLCanvasElement ? img.width > 0 : img.complete && img.naturalWidth > 0;
+
+export function prepareGameSprites(images: GameImages) {
+  const cache = new Map<HTMLImageElement, HTMLImageElement | HTMLCanvasElement>();
+  const normalized = (frame: HTMLImageElement | HTMLCanvasElement) => {
+    if (frame instanceof HTMLCanvasElement) return frame;
+    const existing = cache.get(frame); if (existing) return existing;
+    const result = normalizeFrame(frame); cache.set(frame, result); return result;
+  };
+  images.run = images.run.map(normalized); images.jump = normalized(images.jump); images.fall = normalized(images.fall);
+  prepareObstacle(images.spikes, true); prepareObstacle(images.totem, false);
+}
+
+export const LETTERBOX_BLUR = 18;
+export const LETTERBOX_BRIGHTNESS = 0.38;
+export function drawLetterbox(ctx: CanvasRenderingContext2D, imgs: GameImages, width: number, height: number, offset: number) {
+  ctx.save(); ctx.filter = `blur(${LETTERBOX_BLUR}px) brightness(${LETTERBOX_BRIGHTNESS})`;
+  drawBackground(ctx, imgs, width + LETTERBOX_BLUR * 4, height + LETTERBOX_BLUR * 4, offset);
+  ctx.restore();
+}
 
 /** Obstacle height/width ratio per kind (matches the art). */
 export const OBSTACLE_ASPECT: Record<ObstacleKind, number> = {
