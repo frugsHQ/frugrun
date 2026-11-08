@@ -54,7 +54,11 @@ export async function saveScore(playerName: string, score: number): Promise<bool
   console.log("[Leaderboard] Saving:", { name: trimmed, score });
 
   // Server validates and keeps only the highest score per name
-  const { error } = await currentRun ? supabase.rpc("submit_score", { _run: currentRun, _name: trimmed, _score: Math.floor(score) }) : { error: { message: "No run ticket" } };
+  if (!currentRun) {
+    console.error("[Leaderboard] Save failed: no run ticket");
+    return false;
+  }
+  const { error } = await supabase.rpc("submit_score", { _run: currentRun, _name: trimmed, _score: Math.floor(score) });
   if (!error) currentRun = null;
   if (error) {
     console.error("[Leaderboard] Save failed:", error.message);
