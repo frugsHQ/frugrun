@@ -71,7 +71,7 @@
 html, body, #root { overscroll-behavior: none; touch-action: none; }
 .font-display { letter-spacing: 0; }
 .game-shell { position: fixed; inset: 0; height: 100dvh; display: grid; place-items: center; overflow: hidden; user-select: none; -webkit-touch-callout: none; }
-.game-backdrop { position: absolute; width: 100%; height: 100%; object-fit: cover; filter: blur(16px) brightness(.32); transform: scale(1.04); pointer-events: none; }
+.game-backdrop { position: absolute; width: 100%; height: 100%; object-fit: cover;  pointer-events: none; }
 .game-tile { position: relative; width: 95%; height: 95%; overflow: hidden; border-radius: 18px; border: 7px solid hsl(var(--wood-light)); outline: 2px solid hsl(var(--accent) / .65); box-shadow: inset 0 0 24px hsl(var(--wood-dark)), var(--game-shadow), var(--game-glow); background: hsl(var(--background)); container-type: size; touch-action: none; }
 .game-tile:fullscreen { width: 100%; height: 100dvh; border-radius: 0; }
 .game-canvas { display: block; position: absolute; inset: 0; touch-action: none; }
@@ -94,7 +94,7 @@ html, body, #root { overscroll-behavior: none; touch-action: none; }
 .pause-overlay, .loading-scene { position: absolute; inset: 0; display: grid; place-items: center; background: hsl(var(--wood-dark) / .45); z-index: 30; }
 .pause-overlay button { font-size: 30px; height: 80px; padding: 20px 32px; color: hsl(var(--accent)); }
 .game-debug { position: absolute; bottom: 12px; left: 12px; color: hsl(var(--primary)); background: hsl(var(--background) / .8); padding: 8px; font: 13px monospace; z-index: 40; }
-.music-player { position: absolute; right: 0; top: 0; width: 280px; pointer-events: auto; border-radius: 24px; color: hsl(var(--foreground)); background: hsl(var(--background) / .92); border: 1px solid hsl(var(--primary) / .4); box-shadow: var(--game-glow); font-family: system-ui, sans-serif; }
+.music-player { position: absolute; right: 0; top: 0; width: 280px; pointer-events: auto; border-radius: 24px; color: hsl(var(--foreground)); background: hsl(var(--background) / .92); border: 1px solid hsl(var(--primary) / .4); font-family: system-ui, sans-serif; }
 .music-bar { display: flex; align-items: center; gap: 2px; padding: 4px; }
 .music-bar button { color: hsl(var(--primary)); border-radius: 50%; }
 .music-title { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 12px; }
@@ -158,3 +158,8 @@ html, body, #root { overscroll-behavior: none; touch-action: none; }
   .game-is-over .game-menu > div:last-child { grid-column: 1 / -1; display: flex; flex-direction: row; flex-wrap: wrap; margin-bottom: 0; }
   .game-is-over .game-menu > div:last-child button { white-space: nowrap; font-size: 18px; padding: 4px 12px; }
 }
+
+.game-debug { max-width: calc(100% - 24px); }
+.game-debug pre { white-space: pre-wrap; margin: 0; font: inherit; }
+.game-debug canvas { display: block; max-width: 100%; }
+.speed-warning { color: hsl(var(--destructive)); }
