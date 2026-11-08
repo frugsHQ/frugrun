@@ -67,7 +67,7 @@ export function MusicPlayer({ gameOver, mutedRef }: { gameOver: boolean; mutedRe
     cancelAnimationFrame(fade.current);
     fadingIn.current = false;
     const from = a.volume, target = volumeRef.current * (gameOver ? AUDIO_TUNING.duck : 1), began = performance.now();
-    const tick = (now: number) => { const t = Math.min(1, (now - began) / AUDIO_TUNING.fadeMs); a.volume = from + (target - from) * t; if (t < 1) fade.current = requestAnimationFrame(tick); };
+    const tick = (now: number) => { const t = Math.min(1, (now - began) / AUDIO_TUNING.fadeMs); a.volume = Math.max(0, Math.min(1, from + (target - from) * t)); if (t < 1) fade.current = requestAnimationFrame(tick); };
     fade.current = requestAnimationFrame(tick);
   }, [gameOver]);
   function toggle() { const a = audio.current; if (!a) return; manualPause.current = !a.paused;
