@@ -64,10 +64,19 @@ export function prepareGameSprites(images: GameImages) {
 
 export const LETTERBOX_BLUR = 18;
 export const LETTERBOX_BRIGHTNESS = 0.38;
+const letterboxCache = new Map<string, HTMLCanvasElement>();
 export function drawLetterbox(ctx: CanvasRenderingContext2D, imgs: GameImages, width: number, height: number, offset: number) {
-  ctx.save(); ctx.filter = `blur(${LETTERBOX_BLUR}px) brightness(${LETTERBOX_BRIGHTNESS})`;
-  drawBackground(ctx, imgs, width + LETTERBOX_BLUR * 4, height + LETTERBOX_BLUR * 4, offset);
-  ctx.restore();
+  if (!ready(imgs.bg)) return;
+  const key = `${imgs.bg.src}:${width}:${height}`;
+  let cached = letterboxCache.get(key);
+  if (!cached) {
+    cached = document.createElement('canvas'); cached.width = Math.ceil(width); cached.height = Math.ceil(height);
+    const off = cached.getContext('2d'); if (!off) return;
+    off.filter = `blur(${LETTERBOX_BLUR}px) brightness(${LETTERBOX_BRIGHTNESS})`;
+    off.drawImage(imgs.bg, -LETTERBOX_BLUR * 2, -LETTERBOX_BLUR * 2, width + LETTERBOX_BLUR * 4, height + LETTERBOX_BLUR * 4);
+    if (letterboxCache.size > 4) letterboxCache.clear(); letterboxCache.set(key, cached);
+  }
+  drawMirroredTiles(ctx, cached as unknown as HTMLImageElement, offset, 0, width, height, width);
 }
 
 /** Obstacle height/width ratio per kind (matches the art). */
