@@ -76,7 +76,9 @@ export function drawLetterbox(ctx: CanvasRenderingContext2D, imgs: GameImages, w
     off.drawImage(imgs.bg, -LETTERBOX_BLUR * 2, -LETTERBOX_BLUR * 2, width + LETTERBOX_BLUR * 4, height + LETTERBOX_BLUR * 4);
     if (letterboxCache.size > 4) letterboxCache.clear(); letterboxCache.set(key, cached);
   }
-  drawMirroredTiles(ctx, cached as unknown as HTMLImageElement, offset, 0, width, height, width);
+  const shift = ((offset % width) + width) % width;
+  ctx.drawImage(cached, -shift, 0, width, height);
+  ctx.drawImage(cached, width - shift, 0, width, height);
 }
 
 /** Obstacle height/width ratio per kind (matches the art). */

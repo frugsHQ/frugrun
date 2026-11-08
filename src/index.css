@@ -153,3 +153,8 @@ html, body, #root { overscroll-behavior: none; touch-action: none; }
   .game-menu { max-height: calc(100cqh - 85px); }
 }
 @media (min-width: 1600px) { .hud-stats { font-size: 28px; padding: 10px 20px; } .hud-score img { width: 140px; height: 48px; } .hud-coins img { width: 36px; height: 36px; } .hud-secondary { font-size: 26px; } .music-player { width: 320px; } .music-title { font-size: 14px; } }
+/* Keep both replay commands fully visible on short screens. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .game-is-over .game-menu > div:last-child { grid-column: 1 / -1; display: flex; flex-direction: row; flex-wrap: wrap; margin-bottom: 0; }
+  .game-is-over .game-menu > div:last-child button { white-space: nowrap; font-size: 18px; padding: 4px 12px; }
+}
