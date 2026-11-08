@@ -39,6 +39,7 @@ export default function FrogRunner() {
   const graphRef = useRef<HTMLCanvasElement>(null);
   const backdropRef = useRef<HTMLImageElement>(null);
   const countdownRemaining = useRef(0);
+  const measurement = useRef({ world: 0, active: false });
   const lastReport = useRef("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgsRef = useRef<GameImages | null>(null);
@@ -72,12 +73,12 @@ export default function FrogRunner() {
   const view = useRef({ width: 1000, height: 600, scale: 1, dpr: 1, x: 0, y: 0 });
   const previous = useRef({ frogY: 0, ground: 0, bg: 0 });
   const particlePool = useRef(Array.from({ length: TUNING.particlePool }, () => ({ x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 1, size: 0 })));
-  const obstaclePool = useRef(Array.from({ length: TUNING.obstaclePool }, () => ({ x: 0, w: 0, h: 0, kind: "spikes" as ObstacleKind, previousX: 0 })));
-  const coinPool = useRef(Array.from({ length: TUNING.coinPool }, () => ({ x: 0, y: 0, phase: 0, previousX: 0 })));
+  const obstaclePool = useRef(Array.from({ length: TUNING.obstaclePool }, () => ({ x: 0, w: 0, h: 0, kind: "spikes" as ObstacleKind, previousX: 0, worldX: 0 })));
+  const coinPool = useRef(Array.from({ length: TUNING.coinPool }, () => ({ x: 0, y: 0, phase: 0, previousX: 0, worldX: 0 })));
   const popups = useRef(Array.from({ length: 12 }, () => ({ x: 0, y: 0, life: 0 })));
   const particle = (list: DustParticle[], value: DustParticle) => { if (meter.current.quality > 0 && list.length >= (meter.current.quality === 1 ? 20 : 8)) return; const p = particlePool.current.find(p => p.life <= 0); if (p) { Object.assign(p, value); list.push(p); } };
-  const addObstacle = (x: number, w: number, h: number, kind: ObstacleKind) => { const p = obstaclePool.current.find(p => !stateRef.current.obstacles.includes(p)); if (p) { p.x = x; p.previousX = x; p.w = w; p.h = h; p.kind = kind; hitObstacles.current.delete(p); stateRef.current.obstacles.push(p); } };
-  const addCoin = (x: number, y: number, phase: number) => { const p = coinPool.current.find(p => !stateRef.current.coinList.includes(p)); if (p) { p.x = x; p.previousX = x; p.y = y; p.phase = phase; stateRef.current.coinList.push(p); } };
+  const addObstacle = (x: number, w: number, h: number, kind: ObstacleKind) => { const p = obstaclePool.current.find(p => !stateRef.current.obstacles.includes(p)); if (p) { p.worldX = x + stateRef.current.groundOffset; p.x = x; p.previousX = x; p.w = w; p.h = h; p.kind = kind; hitObstacles.current.delete(p); stateRef.current.obstacles.push(p); } };
+  const addCoin = (x: number, y: number, phase: number) => { const p = coinPool.current.find(p => !stateRef.current.coinList.includes(p)); if (p) { p.worldX = x + stateRef.current.groundOffset; p.x = x; p.previousX = x; p.y = y; p.phase = phase; stateRef.current.coinList.push(p); } };
 
   // ── Core game state (ref to avoid re-renders during loop) ──
   const stateRef = useRef({
@@ -375,7 +376,7 @@ export default function FrogRunner() {
     if (s.gameState === 'dying') { s.elapsed += dt; s.deathTimer -= dt;
       const move = getDifficulty(s.elapsed).speed * dt * 1;
       s.groundOffset += move; s.bgOffset = s.groundOffset * TUNING.parallaxFar;
-      for (const ob of s.obstacles) ob.x -= move; for (const coin of s.coinList) coin.x -= move;
+      for (const ob of s.obstacles) ob.x = (ob.worldX ?? ob.x + s.groundOffset - move) - s.groundOffset; for (const coin of s.coinList) coin.x = (coin.worldX ?? coin.x + s.groundOffset - move) - s.groundOffset;
       if (s.deathTimer <= 0) endGame(); return; }
     if (s.gameState !== 'playing') { if (s.gameState === 'start' || s.gameState === 'leaderboard') {
       s.frogY = restY; previous.current.frogY = restY; s.onGround = true;
@@ -471,7 +472,7 @@ export default function FrogRunner() {
 
     // ── Move obstacles & award clear points ──
     for (let i = s.obstacles.length - 1; i >= 0; i--) {
-      s.obstacles[i].x -= speed * dt;
+      s.obstacles[i].x = (s.obstacles[i].worldX ?? s.obstacles[i].x + s.groundOffset - speed * dt) - s.groundOffset;
       if (s.obstacles[i].x + s.obstacles[i].w < 0) {
         s.obstacles.splice(i, 1);
         s.score += Math.round(SCORING.baseObstaclePoints * s.combo);
@@ -486,7 +487,7 @@ export default function FrogRunner() {
     // interpolated, pixel-snapped polygons that drawScene actually displays.
     const coinSize = frogW * COIN_SIZE_RATIO;
     for (let i = s.coinList.length - 1; i >= 0; i--) {
-      s.coinList[i].x -= speed * dt;
+      s.coinList[i].x = (s.coinList[i].worldX ?? s.coinList[i].x + s.groundOffset - speed * dt) - s.groundOffset;
       if (s.coinList[i].x < -coinSize) s.coinList.splice(i, 1);
     }
 
@@ -557,7 +558,11 @@ World ${m.speed.toFixed(1)} px/s · variance ${m.variance.toFixed(2)}%${m.varian
           if (graph) { graph.clearRect(0, 0, 240, 40); graph.strokeStyle = m.variance > 3 ? canvasColors.current.warning : canvasColors.current.debug; graph.beginPath(); const max = Math.max(1, ...m.graph); m.graph.forEach((speed, i) => { const x = i * 240 / Math.max(1, m.graph.length - 1), y = 38 - speed / max * 34; if (i) graph.lineTo(x, y); else graph.moveTo(x, y); }); graph.stroke(); }
         }
       }
-      const changed = meter.current.record(time, dt, updateMs, renderMs, performance.now() - domStart, steps, active ? stateRef.current.groundOffset - beforeWorld : 0, expectedDistance, active);
+      const measurable = active && measurement.current.active && dt <= 250;
+      const measuredDistance = interpolatedWorld - measurement.current.world;
+      const targetDistance = getDifficulty(stateRef.current.elapsed).speed * dt;
+      const changed = meter.current.record(time, dt, updateMs, renderMs, performance.now() - domStart, steps, measuredDistance, targetDistance, measurable);
+      measurement.current.world = interpolatedWorld; measurement.current.active = active;
       if (changed) resize();
       id = requestAnimationFrame(tick);
     };
