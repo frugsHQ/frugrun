@@ -4,9 +4,10 @@
 - [x] Desktop frame, mobile HUD, fullscreen, keyboard-safe menus and pause countdown
 - [x] Persistent playlist player, Frugs Life song and independent effects volume
 - [x] Tests and desktop/portrait/landscape checks
-- [ ] Targeted fixes: background-filled letterboxing and secondary menu button
-- [ ] Normalize all Frug frames, add anchor debug guides and subtle hat/cape sway
-- [ ] Retune jump airtime and apex hang; verify obstacle spacing remains clearable
-- [ ] Sprite-derived, render-matched swept hitboxes, coin radius and single-hit protection
-- [ ] Edit only the statue in the existing background; compare before replacing
-- [ ] Run focused tests and desktop/portrait/landscape gameplay checks; report every requested item
+- [x] Background-filled letterboxing and secondary menu button
+- [x] Normalize Frug frames and add anchor debug guides
+- [x] Add subtle regional hat/cape sway; bitmap layer overlap remains a visual limitation
+- [x] Retune jump airtime and apex hang; safe obstacle recovery spacing
+- [x] Alpha-derived silhouette shapes, rendered translation sweeps, coin radius and single-hit protection
+- [x] Compare statue edit and retain original: generated edit failed close-match requirement
+- [x] Focused tests and desktop/portrait/landscape gameplay checks
