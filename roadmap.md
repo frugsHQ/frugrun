@@ -4,4 +4,9 @@
 - [x] Desktop frame, mobile HUD, fullscreen, keyboard-safe menus and pause countdown
 - [x] Persistent playlist player, Frugs Life song and independent effects volume
 - [x] Tests and desktop/portrait/landscape checks
-- [ ] Remaining: re-tune Frug size in portrait, "Tap to start music" before first tap on the hosted preview, a deeper visual check of each sprite pose
+- [ ] Targeted fixes: background-filled letterboxing and secondary menu button
+- [ ] Normalize all Frug frames, add anchor debug guides and subtle hat/cape sway
+- [ ] Retune jump airtime and apex hang; verify obstacle spacing remains clearable
+- [ ] Sprite-derived, render-matched swept hitboxes, coin radius and single-hit protection
+- [ ] Edit only the statue in the existing background; compare before replacing
+- [ ] Run focused tests and desktop/portrait/landscape gameplay checks; report every requested item
