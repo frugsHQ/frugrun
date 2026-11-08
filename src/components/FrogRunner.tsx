@@ -2,10 +2,12 @@ import { useRef, useEffect, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Maximize, Minimize } from "lucide-react";
 import { MusicPlayer } from "./game/music";
-import { TUNING, advanceJump, jumpVelocity, difficultyAt } from "./game/motion";
+import { TUNING, advanceJump, jumpVelocity, difficultyAt, safeSpawnInterval } from "./game/motion";
 export { TUNING } from "./game/motion";
 import logoSrc from "@/assets/frugrun-logo.png";
-import backgroundSrc from "@/assets/jungle-bg.jpg";
+import { BACKGROUND_SRC as backgroundSrc } from "./game/drawing";
+import { drawFrug } from "./game/sprites";
+import { spriteInfo, transformBox, rectangle, sweptOverlap, canDamage, BODY_ANCHOR, FOOT_BASELINE, COIN_PICKUP_SCALE, type Point, type Pose } from "./game/spriteGeometry";
 import coinIconSrc from "@/assets/frug-coin.png";
 
 // ── Modular imports ────────────────────────────────────────
@@ -17,7 +19,7 @@ import type { ObstacleKind } from "./game/constants";
 import type { DustParticle, Obstacle, GameState, MilestoneMsg, Coin } from "./game/types";
 import {
   loadGameImages, drawBackground, drawGround, drawForegroundGrass, warmSceneCache, drawObstacle, drawCoin,
-  drawFrogFallback, imageReady, OBSTACLE_ASPECT, type GameImages,
+  drawFrogFallback, imageReady, OBSTACLE_ASPECT, prepareGameSprites, drawLetterbox, type GameImages,
 } from "./game/drawing";
 import { playSfxJump, playSfxScore, playSfxGameOver, playSfxCoin, playSfxHit } from "./game/sfx";
 import { StartOverlay, GameOverOverlay, LeaderboardOverlay } from "./game/overlays";
@@ -30,6 +32,8 @@ export default function FrogRunner() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgsRef = useRef<GameImages | null>(null);
   const runFrameRef = useRef(0);
+  const hitObstacles = useRef(new WeakSet<Obstacle>());
+  const lastDrawn = useRef<{ pose: Pose; obstacles: Map<Obstacle, number>; polygons: Point[][] } | null>(null);
   const dustRef = useRef<DustParticle[]>([]);
   const sparkleRef = useRef<DustParticle[]>([]);
   const shakeRef = useRef(0);
@@ -61,7 +65,7 @@ export default function FrogRunner() {
   const coinPool = useRef(Array.from({ length: TUNING.coinPool }, () => ({ x: 0, y: 0, phase: 0, previousX: 0 })));
   const popups = useRef(Array.from({ length: 12 }, () => ({ x: 0, y: 0, life: 0 })));
   const particle = (list: DustParticle[], value: DustParticle) => { const p = particlePool.current.find(p => p.life <= 0); if (p) { Object.assign(p, value); list.push(p); } };
-  const addObstacle = (x: number, w: number, h: number, kind: ObstacleKind) => { const p = obstaclePool.current.find(p => !stateRef.current.obstacles.includes(p)); if (p) { p.x = x; p.previousX = x; p.w = w; p.h = h; p.kind = kind; stateRef.current.obstacles.push(p); } };
+  const addObstacle = (x: number, w: number, h: number, kind: ObstacleKind) => { const p = obstaclePool.current.find(p => !stateRef.current.obstacles.includes(p)); if (p) { p.x = x; p.previousX = x; p.w = w; p.h = h; p.kind = kind; hitObstacles.current.delete(p); stateRef.current.obstacles.push(p); } };
   const addCoin = (x: number, y: number, phase: number) => { const p = coinPool.current.find(p => !stateRef.current.coinList.includes(p)); if (p) { p.x = x; p.previousX = x; p.y = y; p.phase = phase; stateRef.current.coinList.push(p); } };
 
   // ── Core game state (ref to avoid re-renders during loop) ──
@@ -104,8 +108,8 @@ export default function FrogRunner() {
 
   // ── Load all images once ──
   useEffect(() => { let active = true; const images = loadGameImages();
-    Promise.all([images.bg, images.ground, images.spikes, images.totem, images.coin, ...images.run, images.jump, images.fall].map(img => img.decode())).then(() => {
-      if (active) { imgsRef.current = images; warmSceneCache(images, stateRef.current.canvasW, stateRef.current.canvasH); setReady(true); }
+    Promise.all([images.bg, images.ground, images.spikes, images.totem, images.coin, ...images.run, images.jump, images.fall].map(img => img instanceof HTMLImageElement ? img.decode() : Promise.resolve())).then(() => {
+      if (active) { prepareGameSprites(images); imgsRef.current = images; warmSceneCache(images, stateRef.current.canvasW, stateRef.current.canvasH); setReady(true); }
     }).catch(() => { if (active) { imgsRef.current = images; warmSceneCache(images, stateRef.current.canvasW, stateRef.current.canvasH); setReady(true); } });
     return () => { active = false; };
   }, []);
@@ -129,7 +133,7 @@ export default function FrogRunner() {
     if (ctx) ctx.imageSmoothingQuality = "high";
     stateRef.current.canvasW = logicalW; stateRef.current.canvasH = TUNING.logicalHeight;
     if (stateRef.current.onGround) stateRef.current.frogY = geom().restY;
-    previous.current.frogY = stateRef.current.frogY;
+    previous.current.frogY = stateRef.current.frogY; lastDrawn.current = null;
     if (imgsRef.current) warmSceneCache(imgsRef.current, logicalW, TUNING.logicalHeight);
   }, []);
 
@@ -194,7 +198,7 @@ export default function FrogRunner() {
     ctx.restore();
 
     // ── Pick sprite frame: run cycle on ground, jump/fall poses in air ──
-    let frame: HTMLImageElement;
+    let frame: HTMLImageElement | HTMLCanvasElement;
     if (s.onGround) {
       runFrameRef.current = Math.floor((s.groundOffset % RUN_FRAME_MS) / RUN_FRAME_MS * imgs.run.length);
       frame = imgs.run[runFrameRef.current];
@@ -215,19 +219,51 @@ export default function FrogRunner() {
       sy = 1 + Math.sin(s.groundOffset / RUN_FRAME_MS * Math.PI * 4) * 0.012;
       rot = Math.sin(s.groundOffset / RUN_FRAME_MS * Math.PI * 2) * 0.012;
     }
-    const dw = frogW * sx, dh = frogH * sy;
-    const dx = frogX + (frogW - dw) / 2;
-    const dy = frogY + frogH - dh;
-
-    // Blink while invulnerable after a hit
+    const pose: Pose = { x: pixel(frogX + frogW / 2), y: pixel(frogY + frogH), scaleX: frogW / 420 * sx, scaleY: frogH / 420 * sy, rotation: rot };
+    const polygons = (spriteInfo.get(frame)?.boxes ?? []).map(box => transformBox(box, pose));
+    const obstaclePositions = new Map<Obstacle, number>();
+    const obstaclePolygons: Point[][] = [];
+    for (const ob of s.obstacles) {
+      const x = pixel((ob.previousX ?? ob.x) + (ob.x - (ob.previousX ?? ob.x)) * alpha);
+      obstaclePositions.set(ob, x);
+      const image = ob.kind === 'spikes' ? imgs.spikes : imgs.totem;
+      const shapes = (spriteInfo.get(image)?.boxes ?? []).map(box => rectangle({ x: x + box.x * ob.w / image.naturalWidth, y: groundY - ob.h + ob.h * 0.06 + box.y * ob.h / image.naturalHeight, w: box.w * ob.w / image.naturalWidth, h: box.h * ob.h / image.naturalHeight }));
+      obstaclePolygons.push(...shapes);
+      if (s.gameState !== 'playing' || !canDamage(s.invuln, hitObstacles.current.has(ob))) continue;
+      const last = lastDrawn.current;
+      const priorX = last?.obstacles.get(ob) ?? x;
+      const delta = { x: pose.x - (last?.pose.x ?? pose.x) - (x - priorX), y: pose.y - (last?.pose.y ?? pose.y) };
+      const collision = polygons.some(poly => shapes.some(shape => sweptOverlap(poly, shape, { x: 0, y: 0 }))) ||
+        (last?.polygons ?? polygons).some(poly => shapes.some(shape => {
+          const priorShape = shape.map(p => ({ x: p.x + priorX - x, y: p.y }));
+          return sweptOverlap(poly, priorShape, delta);
+        }));
+      if (collision) {
+        hitObstacles.current.add(ob); s.lives -= 1; setLives(s.lives); s.combo = 1;
+        s.invuln = HIT_INVULN_MS; shakeRef.current = 200; playSfxHit(mutedRef);
+        if (s.lives <= 0) { s.gameState = 'dying'; s.deathTimer = TUNING.deathMs; shakeRef.current = 300; }
+      }
+    }
+    lastDrawn.current = { pose, obstacles: obstaclePositions, polygons };
+    // Pickups use the exact rendered body rectangles with a generous circular radius.
+    const pickupRadius = coinSize * COIN_PICKUP_SCALE;
+    if (s.gameState === 'playing') for (let i = s.coinList.length - 1; i >= 0; i--) {
+      const coin = s.coinList[i];
+      const x = pixel((coin.previousX ?? coin.x) + (coin.x - (coin.previousX ?? coin.x)) * alpha);
+      const touches = polygons.some(poly => {
+        const minX = Math.min(...poly.map(p => p.x)), maxX = Math.max(...poly.map(p => p.x));
+        const minY = Math.min(...poly.map(p => p.y)), maxY = Math.max(...poly.map(p => p.y));
+        return (x - Math.max(minX, Math.min(x, maxX))) ** 2 + (coin.y - Math.max(minY, Math.min(coin.y, maxY))) ** 2 <= pickupRadius ** 2;
+      });
+      if (!touches) continue;
+      s.coinList.splice(i, 1); s.coins++; s.score += COIN_POINTS; checkMilestones(s.score); playSfxCoin(mutedRef);
+      const popup = popups.current.find(p => p.life <= 0); if (popup) { popup.x = x; popup.y = coin.y; popup.life = 500; }
+      for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; particle(sparkleRef.current, { x, y: coin.y, vx: Math.cos(a) * 0.12, vy: Math.sin(a) * 0.12, life: 350, maxLife: 350, size: 2 + Math.random() * 2 }); }
+    }
     const blinkHidden = s.invuln > 0 && Math.floor(s.invuln / 90) % 2 === 0;
     if (!blinkHidden) {
-      ctx.save();
-      ctx.translate(pixel(dx + dw / 2), pixel(dy + dh));
-      ctx.rotate(rot);
-      if (imageReady(frame)) ctx.drawImage(frame, -dw / 2, -dh, dw, dh);
-      else drawFrogFallback(ctx, -dw / 2, -dh, dw, dh);
-      ctx.restore();
+      if (imageReady(frame)) drawFrug(ctx, frame, pose, s.groundOffset / RUN_FRAME_MS * Math.PI * 2, getDifficulty(s.elapsed).speed, s.frogVY);
+      else drawFrogFallback(ctx, frogX, frogY, frogW, frogH);
     }
 
     drawForegroundGrass(ctx, imgs, W, groundY, H, pixel(groundOffset));
@@ -237,8 +273,11 @@ export default function FrogRunner() {
     ctx.globalAlpha = 1;
     if (debugRef.current) {
       ctx.strokeStyle = canvasColors.current.debug;
-      ctx.strokeRect(frogX + frogW * TUNING.playerPadX, frogY + frogH * TUNING.playerPadY, frogW * TUNING.playerWidth, frogH * TUNING.playerHeight);
-      for (const ob of s.obstacles) ctx.strokeRect(ob.x + ob.w * 0.1, groundY - ob.h * 0.9, ob.w * 0.8, ob.h * 0.9);
+      for (const poly of [...polygons, ...obstaclePolygons]) { ctx.beginPath(); poly.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.closePath(); ctx.stroke(); }
+      for (const coin of s.coinList) { const x = pixel((coin.previousX ?? coin.x) + (coin.x - (coin.previousX ?? coin.x)) * alpha); ctx.beginPath(); ctx.arc(x, coin.y, pickupRadius, 0, Math.PI * 2); ctx.stroke(); }
+      ctx.save(); ctx.translate(pose.x, pose.y); ctx.rotate(pose.rotation);
+      ctx.beginPath(); ctx.moveTo(-frogW / 2, 0); ctx.lineTo(frogW / 2, 0); ctx.moveTo(0, -frogH); ctx.lineTo(0, 10); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
     }
 
     // ── Dust + coin sparkles ──
@@ -384,6 +423,7 @@ export default function FrogRunner() {
       const oh = frogH * (0.5 + Math.random() * 0.4);
       const ow = oh / OBSTACLE_ASPECT[kind];
       const ox = W + 10;
+      s.nextSpawn = safeSpawnInterval(s.nextSpawn, speed, ow);
       addObstacle(ox, ow, oh, kind);
 
       const coinSize = frogW * COIN_SIZE_RATIO;
@@ -419,60 +459,12 @@ export default function FrogRunner() {
       }
     }
 
-    // ── Frug hitbox: body only (skip cape on the left, hat on top) ──
-    const frogBox = {
-      x: frogX + frogW * TUNING.playerPadX,
-      y: s.frogY + frogH * TUNING.playerPadY,
-      w: frogW * TUNING.playerWidth,
-      h: frogH * TUNING.playerHeight,
-    };
-
-    // ── Coins: move + collect (+10 each) ──
+    // Position updates stay fixed-step. Collision is evaluated against the
+    // interpolated, pixel-snapped polygons that drawScene actually displays.
     const coinSize = frogW * COIN_SIZE_RATIO;
     for (let i = s.coinList.length - 1; i >= 0; i--) {
-      const c = s.coinList[i];
-      c.x -= speed * dt;
-      if (c.x < -coinSize) { s.coinList.splice(i, 1); continue; }
-      const r = coinSize * 0.45;
-      const nx = Math.max(frogBox.x, Math.min(c.x, frogBox.x + frogBox.w));
-      const ny = Math.max(frogBox.y - frogH * 0.15, Math.min(c.y, frogBox.y + frogBox.h));
-      if ((c.x - nx) ** 2 + (c.y - ny) ** 2 < r * r) {
-        s.coinList.splice(i, 1);
-        const popup = popups.current.find(p => p.life <= 0); if (popup) { popup.x = c.x; popup.y = c.y; popup.life = 500; }
-        s.coins += 1;
-        s.score += COIN_POINTS;
-        checkMilestones(s.score);
-        playSfxCoin(mutedRef);
-        for (let k = 0; k < 8; k++) {
-          const a = (k / 8) * Math.PI * 2;
-          particle(sparkleRef.current, {
-            x: c.x, y: c.y, vx: Math.cos(a) * 0.12 * scale, vy: Math.sin(a) * 0.12 * scale,
-            life: 350, maxLife: 350, size: 2 + Math.random() * 2,
-          });
-        }
-      }
-    }
-
-    // ── Obstacle collision → lose a heart ──
-    if (s.invuln <= 0) {
-      for (const ob of s.obstacles) {
-        const padX = ob.w * (ob.kind === "spikes" ? 0.2 : 0.12);
-        const padTop = ob.h * (ob.kind === "spikes" ? 0.15 : 0.1);
-        const obBox = { x: ob.x + padX, y: groundY - ob.h + padTop, w: ob.w - padX * 2, h: ob.h - padTop };
-        if (
-          frogBox.x < obBox.x + obBox.w && frogBox.x + frogBox.w > obBox.x &&
-          frogBox.y < obBox.y + obBox.h && frogBox.y + frogBox.h > obBox.y
-        ) {
-          s.lives -= 1;
-          setLives(s.lives);
-          s.combo = 1.0;
-          if (s.lives <= 0) { s.gameState = "dying"; s.deathTimer = TUNING.deathMs; shakeRef.current = 300; playSfxHit(mutedRef); return; }
-          s.invuln = HIT_INVULN_MS;
-          shakeRef.current = 200;
-          playSfxHit(mutedRef);
-          break;
-        }
-      }
+      s.coinList[i].x -= speed * dt;
+      if (s.coinList[i].x < -coinSize) s.coinList.splice(i, 1);
     }
 
   }, [endGame]);
@@ -491,6 +483,11 @@ export default function FrogRunner() {
         c.accumulator += dt;
         while (c.accumulator >= TUNING.stepMs) { simulate(TUNING.stepMs); c.accumulator -= TUNING.stepMs; }
       } else c.accumulator = 0;
+      if (imgsRef.current) {
+        ctx.save(); ctx.setTransform(view.current.dpr, 0, 0, view.current.dpr, 0, 0);
+        drawLetterbox(ctx, imgsRef.current, canvas.width / view.current.dpr, canvas.height / view.current.dpr, stateRef.current.bgOffset);
+        ctx.restore();
+      }
       ctx.save(); ctx.beginPath(); ctx.rect(0, 0, view.current.width, view.current.height); ctx.clip();
       if (shakeRef.current > 0 && !pausedRef.current) { shakeRef.current = Math.max(0, shakeRef.current - dt); const amplitude = shakeRef.current / 300 * 7;
         ctx.translate(Math.sin(time * 0.12) * amplitude, Math.cos(time * 0.15) * amplitude); }
@@ -523,7 +520,7 @@ export default function FrogRunner() {
     s.survivalAccum = 0;
     s.frogY = geom().restY; s.frogVY = 0;
     s.onGround = true; s.wasOnGround = true; s.squashTimer = 0;
-    s.obstacles = []; s.coinList = [];
+    s.obstacles = []; s.coinList = []; hitObstacles.current = new WeakSet(); lastDrawn.current = null;
     dustRef.current = []; sparkleRef.current = [];
     milestoneRef.current = null;
     triggeredMilestonesRef.current = new Set();
@@ -577,7 +574,7 @@ export default function FrogRunner() {
   }, [startGame, resumeGame]);
   const release = useCallback(() => {
     const s = stateRef.current; input.current.held = false;
-    if (s.frogVY < 0) s.frogVY *= TUNING.jumpCut;
+    if (s.frogVY < 0 && input.current.heldMs < TUNING.holdMs) s.frogVY *= TUNING.jumpCut;
   }, []);
   useEffect(() => {
     resize(); const observer = new ResizeObserver(resize); if (tileRef.current) observer.observe(tileRef.current);

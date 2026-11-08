@@ -173,7 +173,8 @@ export function GameOverOverlay({
         </Button>
         <Button
           onClick={onMenu}
-          className="px-6 py-2 text-card-foreground/70 hover:text-card-foreground text-base transition-colors"
+          variant="secondary"
+          className="px-6 py-3 bg-secondary text-secondary-foreground rounded-xl text-lg border-4 border-wood-dark hover:brightness-110 active:scale-95 transition-all"
         >
           ← Back to Menu
         </Button>
