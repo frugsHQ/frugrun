@@ -4,7 +4,7 @@ import { TUNING } from "./motion";
 import type { Coin } from "./types";
 import { normalizeFrame, prepareObstacle } from './sprites';
 
-import bgSrc from "@/assets/jungle-bg.jpg";
+import bgSrc from "@/assets/jungle-bg-frog.png";
 export { bgSrc as BACKGROUND_SRC };
 import groundSrc from "@/assets/ground-tile.jpg";
 import spikesSrc from "@/assets/obstacle-spikes.png";
