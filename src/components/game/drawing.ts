@@ -267,6 +267,10 @@ export function makeCompositedLayers(imgs: GameImages, W: number, H: number, rat
     const c = document.createElement('canvas'); c.width = Math.ceil((period + W) * ratio); c.height = Math.ceil(H * ratio);
     const ctx = c.getContext('2d');
     if (ctx) { ctx.scale(ratio, ratio); drawMirroredTiles(ctx, index === 3 ? imgs.ground : imgs.bg, 0, index === 3 ? groundY - 8 : H - bgH, tileW, tileH, W, index === 3, index === 1 || index === 2 ? index - 1 : -1); }
-    return { src: c.toDataURL('image/png'), period, fraction, width: c.width / ratio };
+    const top = index === 3 ? groundY - 8 : index === 1 ? H * .65 : index === 2 ? H * .78 : 0;
+    const bottom = index === 1 || index === 2 ? groundY : H;
+    const cropped = document.createElement('canvas'); cropped.width = c.width; cropped.height = Math.ceil((bottom - top) * ratio);
+    cropped.getContext('2d')?.drawImage(c, 0, -top * ratio);
+    return { src: cropped.toDataURL('image/png'), period, fraction, width: cropped.width / ratio, top, height: cropped.height / ratio };
   });
 }
