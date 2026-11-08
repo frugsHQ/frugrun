@@ -59,18 +59,18 @@ export function rectangle(box: Box): Point[] { return [{ x: box.x, y: box.y }, {
 // Continuous separating-axis test: exact translation sweep, not enlarged endpoint boxes.
 export function sweptOverlap(a: Point[], b: Point[], delta: Point): boolean {
   let entry = 0, exit = 1;
-  for (const poly of [a, b]) for (let i = 0; i < poly.length; i++) {
+  for (let side = 0; side < 2; side++) { const poly = side === 0 ? a : b; for (let i = 0; i < poly.length; i++) {
     const p = poly[i], q = poly[(i + 1) % poly.length];
-    const axis = { x: -(q.y - p.y), y: q.x - p.x };
-    const project = (v: Point) => v.x * axis.x + v.y * axis.y;
-    const ap = a.map(project), bp = b.map(project);
-    const amin = Math.min(...ap), amax = Math.max(...ap), bmin = Math.min(...bp), bmax = Math.max(...bp);
-    const speed = project(delta);
+    const ax = -(q.y - p.y), ay = q.x - p.x;
+    let amin = Infinity, amax = -Infinity, bmin = Infinity, bmax = -Infinity;
+    for (let k = 0; k < a.length; k++) { const v = a[k].x * ax + a[k].y * ay; amin = Math.min(amin, v); amax = Math.max(amax, v); }
+    for (let k = 0; k < b.length; k++) { const v = b[k].x * ax + b[k].y * ay; bmin = Math.min(bmin, v); bmax = Math.max(bmax, v); }
+    const speed = delta.x * ax + delta.y * ay;
     if (Math.abs(speed) < 1e-9) { if (amax <= bmin || amin >= bmax) return false; continue; }
     const first = (bmin - amax) / speed, last = (bmax - amin) / speed;
     entry = Math.max(entry, Math.min(first, last)); exit = Math.min(exit, Math.max(first, last));
     if (entry >= exit) return false;
-  }
+  } }
   return entry < exit;
 }
 

@@ -57,6 +57,11 @@ export function drawFrug(ctx: CanvasRenderingContext2D, frame: HTMLCanvasElement
   ctx.restore();
 }
 
+/** Warm color-separated layers before any running/jumping pose is first displayed. */
+export function warmFrugLayers(frames: (HTMLCanvasElement | HTMLImageElement)[]) {
+  for (const frame of frames) regionalLayers(frame);
+}
+
 const layerCache = new WeakMap<CanvasImageSource, { body: HTMLCanvasElement; cape: HTMLCanvasElement; hat: HTMLCanvasElement }>();
 function regionalLayers(frame: HTMLCanvasElement | HTMLImageElement) {
   const cached = layerCache.get(frame); if (cached) return cached;

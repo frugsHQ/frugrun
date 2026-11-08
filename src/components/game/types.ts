@@ -6,6 +6,7 @@ export interface Coin {
   x: number;
   y: number;      // center
   previousX?: number;
+  worldX?: number;
   phase: number;  // spin offset so coins don't spin in sync
 }
 
@@ -26,6 +27,7 @@ export interface Obstacle {
   w: number;
   h: number;
   previousX?: number;
+  worldX?: number;
   kind: ObstacleKind;
 }
 

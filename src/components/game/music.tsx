@@ -23,8 +23,7 @@ export function MusicPlayer({ gameOver, mutedRef }: { gameOver: boolean; mutedRe
   const [blocked, setBlocked] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [track, setTrack] = useState(0);
-  const [time, setTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const progressRef = useRef<HTMLInputElement>(null);
   const fade = useRef(0);
   const fadingIn = useRef(false);
   function applyVolume() {
@@ -48,7 +47,9 @@ export function MusicPlayer({ gameOver, mutedRef }: { gameOver: boolean; mutedRe
   }
   useEffect(() => {
     const a = new Audio(TRACKS[0].src); audio.current = a; a.preload = 'auto'; applyVolume();
-    const update = () => { setTime(a.currentTime); setDuration(Number.isFinite(a.duration) ? a.duration : 0); };
+    let lastProgress = 0;
+    const update = () => { const now = performance.now(); if (now - lastProgress < 100) return; lastProgress = now;
+      const el = progressRef.current; if (el) { el.value = String(a.currentTime); el.max = String(Number.isFinite(a.duration) && a.duration > 0 ? a.duration : 1); } };
     const next = () => setTrack(t => (t + 1) % TRACKS.length);
     a.addEventListener('timeupdate', update); a.addEventListener('loadedmetadata', update); a.addEventListener('ended', next);
     a.addEventListener('pause', () => setPlaying(false));
@@ -61,7 +62,7 @@ export function MusicPlayer({ gameOver, mutedRef }: { gameOver: boolean; mutedRe
     return () => { cancelAnimationFrame(fade.current); a.pause(); a.src = ''; audio.current = null;
       window.removeEventListener('pointerdown', gesture, true); window.removeEventListener('keydown', gesture, true); window.removeEventListener('keydown', keys); document.removeEventListener('visibilitychange', visibility); };
   }, []);
-  useEffect(() => { const a = audio.current; if (!a) return; a.src = TRACKS[track].src; setTime(0); setDuration(0); start(); }, [track]);
+  useEffect(() => { const a = audio.current; if (!a) return; a.src = TRACKS[track].src; if (progressRef.current) { progressRef.current.value = '0'; progressRef.current.max = '1'; } start(); }, [track]);
   useEffect(() => {
     const a = audio.current; if (!a) return;
     cancelAnimationFrame(fade.current);
@@ -82,7 +83,7 @@ export function MusicPlayer({ gameOver, mutedRef }: { gameOver: boolean; mutedRe
     </div>
     <div className="music-details">
       <div className="music-controls">{control('Previous track', <SkipBack />, () => setTrack(t => (t + TRACKS.length - 1) % TRACKS.length))}
-      <input aria-label="Track progress" type="range" min={0} max={duration || 1} step="0.1" value={time} onChange={e => { if (audio.current) audio.current.currentTime = Number(e.target.value); }} />
+      <input ref={progressRef} aria-label="Track progress" type="range" min={0} defaultValue={0} step="0.1" onChange={e => { if (audio.current) audio.current.currentTime = Number(e.target.value); }} />
       {control('Next track', <SkipForward />, () => setTrack(t => (t + 1) % TRACKS.length))}</div>
       <label className="music-volume">Volume<input aria-label="Music volume" type="range" min="0" max="1" step="0.01" value={volume} onChange={e => { const v = Number(e.target.value); volumeRef.current = v; setVolume(v); localStorage.setItem('frugMusicVolume', String(v)); applyVolume(); }} /></label>
     </div>

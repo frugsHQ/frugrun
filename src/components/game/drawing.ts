@@ -76,9 +76,8 @@ export function drawLetterbox(ctx: CanvasRenderingContext2D, imgs: GameImages, w
     off.drawImage(imgs.bg, -LETTERBOX_BLUR * 2, -LETTERBOX_BLUR * 2, width + LETTERBOX_BLUR * 4, height + LETTERBOX_BLUR * 4);
     if (letterboxCache.size > 4) letterboxCache.clear(); letterboxCache.set(key, cached);
   }
-  const shift = ((offset % width) + width) % width;
-  ctx.drawImage(cached, -shift, 0, width, height);
-  ctx.drawImage(cached, width - shift, 0, width, height);
+  void offset;
+  ctx.drawImage(cached, 0, 0, width, height);
 }
 
 /** Obstacle height/width ratio per kind (matches the art). */
@@ -93,23 +92,44 @@ const tileCache = new Map<string, HTMLCanvasElement>();
 function drawMirroredTiles(
   ctx: CanvasRenderingContext2D, img: HTMLImageElement,
   offset: number, y: number, tileW: number, tileH: number, W: number,
+  snapped = true, foliage = -1,
 ) {
   // Cache a mirrored pair at its final logical size. No large image resampling per frame.
   const repeats = Math.max(1, Math.ceil(W / (tileW * 2)));
-  const pairWidth = tileW * 2;
-  const key = `${img.src}:${tileW}:${tileH}:${repeats}`;
+  const transform = ctx.getTransform();
+  const ratio = Math.hypot(transform.a, transform.b) || 1;
+  const physicalTileW = Math.max(1, Math.round(tileW * ratio));
+  const pairWidth = physicalTileW * 2;
+  const key = `${img.src}:${physicalTileW}:${tileH * ratio}:${repeats}:${foliage}`;
   let cached = tileCache.get(key);
   if (!cached) {
-    cached = document.createElement('canvas'); cached.width = Math.ceil(pairWidth * repeats); cached.height = Math.ceil(tileH);
+    cached = document.createElement('canvas'); cached.width = pairWidth * repeats; cached.height = Math.ceil(tileH * ratio);
     const off = cached.getContext('2d');
-    if (off) { off.imageSmoothingQuality = 'high'; for (let i = 0; i < repeats; i++) { off.save(); off.translate(i * pairWidth, 0); off.drawImage(img, 0, 0, tileW + 1, tileH); off.translate(pairWidth, 0); off.scale(-1, 1); off.drawImage(img, 0, 0, tileW + 1, tileH); off.restore(); } }
+    if (off) {
+      off.imageSmoothingQuality = 'high';
+      for (let i = 0; i < repeats; i++) { off.save(); off.translate(i * pairWidth, 0); off.drawImage(img, 0, 0, physicalTileW + 1, cached.height); off.translate(pairWidth, 0); off.scale(-1, 1); off.drawImage(img, 0, 0, physicalTileW + 1, cached.height); off.restore(); }
+      if (foliage >= 0) {
+        // Bake the original four feathered strips once, not eight full-scene clips every frame.
+        const H = W === 0 ? 600 : TUNING.logicalHeight;
+        const top = H * (foliage === 0 ? .65 : .78), bottom = H * TUNING.groundRatio;
+        const feather = (bottom - top) / 4;
+        off.globalCompositeOperation = 'destination-in';
+        const mask = document.createElement('canvas'); mask.width = 1; mask.height = cached.height;
+        const m = mask.getContext('2d');
+        if (m) for (let strip = 0; strip < 4; strip++) { m.fillStyle = `rgba(0,0,0,${(strip + 1) * (foliage === 0 ? .07 : .04)})`; m.fillRect(0, (top + feather * strip - y) * ratio, 1, feather * ratio + 1); }
+        off.drawImage(mask, 0, 0, cached.width, cached.height);
+      }
+    }
     if (tileCache.size > 12) tileCache.clear(); tileCache.set(key, cached);
   }
   const period = pairWidth * repeats;
-  const ratio = Math.hypot(ctx.getTransform().a, ctx.getTransform().b) || 1;
-  const start = Math.round((-((offset % period) + period) % period) * ratio) / ratio;
-  ctx.drawImage(cached, start, y, period + 1, tileH);
-  ctx.drawImage(cached, start + period, y, period + 1, tileH);
+  const raw = -((offset * ratio % period) + period) % period;
+  const start = snapped ? Math.round(raw) : raw;
+  // Device-sized sources and destinations: scrolling does not resample the painting.
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(cached, start + transform.e, y * ratio + transform.f);
+  ctx.drawImage(cached, start + period + transform.e - 1, y * ratio + transform.f);
+  ctx.restore();
 }
 
 // ── Painted jungle background (slow parallax) ──────────────
@@ -127,18 +147,11 @@ export function drawBackground(
   // Cover the full height, keep aspect ratio
   const tileH = Math.max(H, W * imgs.bg.naturalHeight / imgs.bg.naturalWidth);
   const tileW = (imgs.bg.naturalWidth / imgs.bg.naturalHeight) * tileH;
-  drawMirroredTiles(ctx, imgs.bg, offset, H - tileH, tileW, tileH, W);
+  drawMirroredTiles(ctx, imgs.bg, offset, H - tileH, tileW, tileH, W, false);
   // Reuse near foliage from the original painting, feathered into the far layer.
   // No replacement artwork: these cached bands create restrained depth.
   for (let layer = 0; layer < 2; layer++) {
-    ctx.save(); const top = H * (layer === 0 ? 0.65 : 0.78), bottom = H * TUNING.groundRatio;
-    const feather = (bottom - top) / 4;
-    for (let strip = 0; strip < 4; strip++) {
-      ctx.save(); ctx.beginPath(); ctx.rect(0, top + feather * strip, W, feather + 1); ctx.clip();
-      ctx.globalAlpha = (strip + 1) * (layer === 0 ? 0.07 : 0.04);
-      drawMirroredTiles(ctx, imgs.bg, offset * (layer === 0 ? TUNING.parallaxMid : TUNING.parallaxNear) / TUNING.parallaxFar, H - tileH, tileW, tileH, W);
-      ctx.restore();
-    } ctx.restore();
+    drawMirroredTiles(ctx, imgs.bg, offset * (layer === 0 ? TUNING.parallaxMid : TUNING.parallaxNear) / TUNING.parallaxFar, H - tileH, tileW, tileH, W, false, layer);
   }
 }
 
@@ -240,4 +253,24 @@ export function warmSceneCache(imgs: GameImages, W: number, H: number) {
   const offscreen = document.createElement('canvas'); offscreen.width = Math.ceil(W); offscreen.height = Math.ceil(H);
   const ctx = offscreen.getContext('2d'); if (!ctx) return;
   drawBackground(ctx, imgs, W, H, 0); drawGround(ctx, imgs, W, H * TUNING.groundRatio, H, 0);
+}
+
+/** Static device-sized artwork; only the compositor's translation changes during play. */
+export function makeCompositedLayers(imgs: GameImages, W: number, H: number, ratio: number) {
+  const bgH = Math.max(H, W * imgs.bg.naturalHeight / imgs.bg.naturalWidth);
+  const bgW = Math.round(imgs.bg.naturalWidth / imgs.bg.naturalHeight * bgH * ratio) / ratio;
+  const groundY = H * TUNING.groundRatio, groundH = H - groundY + 8;
+  const groundW = Math.round(imgs.ground.naturalWidth / imgs.ground.naturalHeight * groundH * ratio) / ratio;
+  return [TUNING.parallaxFar, TUNING.parallaxMid, TUNING.parallaxNear, 1].map((fraction, index) => {
+    const tileW = index === 3 ? groundW : bgW, tileH = index === 3 ? groundH : bgH;
+    const period = tileW * 2 * Math.max(1, Math.ceil(W / (tileW * 2)));
+    const c = document.createElement('canvas'); c.width = Math.ceil((period + W) * ratio); c.height = Math.ceil(H * ratio);
+    const ctx = c.getContext('2d');
+    if (ctx) { ctx.scale(ratio, ratio); drawMirroredTiles(ctx, index === 3 ? imgs.ground : imgs.bg, 0, index === 3 ? groundY - 8 : H - bgH, tileW, tileH, W, index === 3, index === 1 || index === 2 ? index - 1 : -1); }
+    const top = index === 3 ? groundY - 8 : index === 1 ? H * .65 : index === 2 ? H * .78 : 0;
+    const bottom = index === 1 || index === 2 ? groundY : H;
+    const cropped = document.createElement('canvas'); cropped.width = c.width; cropped.height = Math.ceil((bottom - top) * ratio);
+    cropped.getContext('2d')?.drawImage(c, 0, -top * ratio);
+    return { src: cropped.toDataURL('image/png'), period, fraction, width: cropped.width / ratio, top, height: cropped.height / ratio };
+  });
 }
