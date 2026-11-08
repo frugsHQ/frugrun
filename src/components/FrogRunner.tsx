@@ -1,3 +1,4 @@
+import { startRun } from "./game/leaderboard";
 import { useRef, useEffect, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Maximize, Minimize } from "lucide-react";
@@ -510,6 +511,7 @@ export default function FrogRunner() {
 
   // ── Start / restart ──
   const startGame = useCallback(() => {
+    void startRun();
     if (!ready) return;
     const s = stateRef.current;
     pausedRef.current = false; setPaused(false);

@@ -29,6 +29,16 @@ export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
   return data ?? [];
 }
 
+let currentRun: string | null = null;
+
+/** Ask the server for a single-use run ticket when a run begins. */
+export async function startRun(): Promise<void> {
+  currentRun = null;
+  const { data, error } = await supabase.rpc("start_run");
+  if (error) { console.error("[Leaderboard] start_run failed:", error.message); return; }
+  currentRun = data as string;
+}
+
 /** Save a score (one entry per name – keeps highest). Returns true on success. */
 export async function saveScore(playerName: string, score: number): Promise<boolean> {
   const trimmed = playerName.trim().slice(0, MAX_NAME_LENGTH);
@@ -44,7 +54,12 @@ export async function saveScore(playerName: string, score: number): Promise<bool
   console.log("[Leaderboard] Saving:", { name: trimmed, score });
 
   // Server validates and keeps only the highest score per name
-  const { error } = await supabase.rpc("submit_score", { _name: trimmed, _score: Math.floor(score) });
+  if (!currentRun) {
+    console.error("[Leaderboard] Save failed: no run ticket");
+    return false;
+  }
+  const { error } = await supabase.rpc("submit_score", { _run: currentRun, _name: trimmed, _score: Math.floor(score) });
+  if (!error) currentRun = null;
   if (error) {
     console.error("[Leaderboard] Save failed:", error.message);
     return false;

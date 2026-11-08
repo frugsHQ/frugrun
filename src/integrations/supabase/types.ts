@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      game_runs: {
+        Row: {
+          id: string
+          started_at: string
+          used_at: string | null
+        }
+        Insert: {
+          id?: string
+          started_at?: string
+          used_at?: string | null
+        }
+        Update: {
+          id?: string
+          started_at?: string
+          used_at?: string | null
+        }
+        Relationships: []
+      }
       leaderboard: {
         Row: {
           created_at: string
@@ -40,8 +58,9 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      start_run: { Args: never; Returns: string }
       submit_score: {
-        Args: { _name: string; _score: number }
+        Args: { _name: string; _run: string; _score: number }
         Returns: boolean
       }
     }
