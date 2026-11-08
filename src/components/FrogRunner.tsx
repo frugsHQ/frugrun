@@ -123,7 +123,11 @@ export default function FrogRunner() {
     Promise.all([images.bg, images.ground, images.spikes, images.totem, images.coin, ...images.run, images.jump, images.fall].map(img => img instanceof HTMLImageElement ? img.decode() : Promise.resolve())).then(() => {
       if (active) { prepareGameSprites(images); warmFrugLayers([...images.run, images.jump, images.fall]); imgsRef.current = images; warmSceneCache(images, stateRef.current.canvasW, stateRef.current.canvasH); setReady(true); resize(); }
     }).catch(() => { if (active) { imgsRef.current = images; warmSceneCache(images, stateRef.current.canvasW, stateRef.current.canvasH); setReady(true); resize(); } });
-    return () => { active = false; };
+    // Re-bake the scene whenever a late image finishes loading (e.g. a slow first visit).
+    const rebake = () => { if (active && imgsRef.current) { warmSceneCache(images, stateRef.current.canvasW, stateRef.current.canvasH); resize(); } };
+    const late = [images.bg, images.ground].filter((img): img is HTMLImageElement => img instanceof HTMLImageElement);
+    late.forEach(img => img.addEventListener('load', rebake));
+    return () => { active = false; late.forEach(img => img.removeEventListener('load', rebake)); };
   }, []);
 
   // ── Resize canvas (sharp on high-DPI screens) ──
@@ -146,7 +150,9 @@ export default function FrogRunner() {
     stateRef.current.canvasW = logicalW; stateRef.current.canvasH = TUNING.logicalHeight;
     if (stateRef.current.onGround) stateRef.current.frogY = geom().restY;
     previous.current.frogY = stateRef.current.frogY; lastDrawn.current = null;
-    if (imgsRef.current) {
+    // Only bake the painted layers once the background and ground are actually decoded,
+    // otherwise a blank/black frame would be cached until the next resize.
+    if (imgsRef.current && imageReady(imgsRef.current.bg) && imageReady(imgsRef.current.ground)) {
       layers.current = makeCompositedLayers(imgsRef.current, logicalW, TUNING.logicalHeight, scale * dpr);
       for (let i = 0; i < layers.current.length; i++) { const el = layerRefs.current[i], layer = layers.current[i]; if (el) { el.src = layer.src; el.style.width = layer.width * scale + 'px'; el.style.height = layer.height * scale + 'px'; el.style.left = view.current.x + 'px'; el.style.top = view.current.y + layer.top * scale + 'px'; } }
       if (foregroundRef.current) { const layer = layers.current[3]; foregroundRef.current.src = layer.src; foregroundRef.current.style.width = layer.width * scale + 'px'; foregroundRef.current.style.height = layer.height * scale + 'px'; foregroundRef.current.style.left = view.current.x + 'px'; foregroundRef.current.style.top = view.current.y + layer.top * scale + 'px'; foregroundRef.current.style.clipPath = `inset(${5 * scale}px 0 ${Math.max(0, layer.height - 17) * scale}px 0)`; }
