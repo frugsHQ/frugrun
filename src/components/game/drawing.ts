@@ -254,3 +254,19 @@ export function warmSceneCache(imgs: GameImages, W: number, H: number) {
   const ctx = offscreen.getContext('2d'); if (!ctx) return;
   drawBackground(ctx, imgs, W, H, 0); drawGround(ctx, imgs, W, H * TUNING.groundRatio, H, 0);
 }
+
+/** Static device-sized artwork; only the compositor's translation changes during play. */
+export function makeCompositedLayers(imgs: GameImages, W: number, H: number, ratio: number) {
+  const bgH = Math.max(H, W * imgs.bg.naturalHeight / imgs.bg.naturalWidth);
+  const bgW = Math.round(imgs.bg.naturalWidth / imgs.bg.naturalHeight * bgH * ratio) / ratio;
+  const groundY = H * TUNING.groundRatio, groundH = H - groundY + 8;
+  const groundW = Math.round(imgs.ground.naturalWidth / imgs.ground.naturalHeight * groundH * ratio) / ratio;
+  return [TUNING.parallaxFar, TUNING.parallaxMid, TUNING.parallaxNear, 1].map((fraction, index) => {
+    const tileW = index === 3 ? groundW : bgW, tileH = index === 3 ? groundH : bgH;
+    const period = tileW * 2 * Math.max(1, Math.ceil(W / (tileW * 2)));
+    const c = document.createElement('canvas'); c.width = Math.ceil((period + W) * ratio); c.height = Math.ceil(H * ratio);
+    const ctx = c.getContext('2d');
+    if (ctx) { ctx.scale(ratio, ratio); drawMirroredTiles(ctx, index === 3 ? imgs.ground : imgs.bg, 0, index === 3 ? groundY - 8 : H - bgH, tileW, tileH, W, index === 3, index === 1 || index === 2 ? index - 1 : -1); }
+    return { src: c.toDataURL('image/png'), period, fraction, width: c.width / ratio };
+  });
+}
