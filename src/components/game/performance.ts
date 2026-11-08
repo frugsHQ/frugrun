@@ -35,7 +35,7 @@ export class PerformanceMeter {
     }
     this.fast = frame < 17.5 ? this.fast + frame : 0;
     const old = this.quality;
-    if (this.slow >= 1000 && this.quality < 2) { this.quality++; this.slow = 0; this.fast = 0; }
+    if (this.slow >= 1000 && this.quality < 2) { this.quality++; this.slow = 0; this.fast = 0; this.qualityWindow = 0; this.qualityFrames = 0; }
     if (this.fast >= 10000 && this.quality > 0) { this.quality--; this.fast = 0; }
     return old !== this.quality;
   }

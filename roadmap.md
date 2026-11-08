@@ -1,9 +1,9 @@
 # Gameplay polish
-- [ ] Measure desktop/mobile frame costs and identify stutter sources
-- [ ] Real-time accumulator, single world position and simulation-driven timers
-- [ ] Reduce rendering/collision costs, cap resolution and adapt quality
-- [ ] Upgrade D diagnostics and clipboard report
-- [ ] Run focused tests and desktop/mobile gameplay checks; report measured limits
+- [x] Measure desktop/mobile frame costs and identify stutter sources
+- [x] Real-time accumulator, world-derived entity positions and simulation-driven gameplay timers
+- [x] Reduce rendering/collision costs, cap resolution and adapt quality; residual geometry allocations and transparent full-frame sprite canvas remain
+- [x] Upgrade D diagnostics and clipboard report
+- [x] Run focused tests and desktop/mobile gameplay checks; tall desktop compositor remains below 60 FPS in sandbox
 - [x] Fixed-step simulation, logical camera, image preload and cached rendering
 - [x] Variable jump, buffered input, grounded animation and pooled effects
 - [x] Desktop frame, mobile HUD, fullscreen, keyboard-safe menus and pause countdown
