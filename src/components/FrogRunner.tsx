@@ -8,7 +8,7 @@ import { TUNING, advanceJump, jumpVelocity, difficultyAt, safeSpawnInterval } fr
 export { TUNING } from "./game/motion";
 import logoSrc from "@/assets/frugrun-logo.png";
 import { BACKGROUND_SRC as backgroundSrc } from "./game/drawing";
-import { drawFrug } from "./game/sprites";
+import { drawFrug, warmFrugLayers } from "./game/sprites";
 import { spriteInfo, transformBox, rectangle, sweptOverlap, canDamage, BODY_ANCHOR, FOOT_BASELINE, COIN_PICKUP_SCALE, type Point, type Pose } from "./game/spriteGeometry";
 import coinIconSrc from "@/assets/frug-coin.png";
 
@@ -121,7 +121,7 @@ export default function FrogRunner() {
   // ── Load all images once ──
   useEffect(() => { let active = true; const images = loadGameImages();
     Promise.all([images.bg, images.ground, images.spikes, images.totem, images.coin, ...images.run, images.jump, images.fall].map(img => img instanceof HTMLImageElement ? img.decode() : Promise.resolve())).then(() => {
-      if (active) { prepareGameSprites(images); imgsRef.current = images; warmSceneCache(images, stateRef.current.canvasW, stateRef.current.canvasH); setReady(true); resize(); }
+      if (active) { prepareGameSprites(images); warmFrugLayers([...images.run, images.jump, images.fall]); imgsRef.current = images; warmSceneCache(images, stateRef.current.canvasW, stateRef.current.canvasH); setReady(true); resize(); }
     }).catch(() => { if (active) { imgsRef.current = images; warmSceneCache(images, stateRef.current.canvasW, stateRef.current.canvasH); setReady(true); resize(); } });
     return () => { active = false; };
   }, []);
@@ -195,7 +195,6 @@ export default function FrogRunner() {
     const pixel = (n: number) => Math.round(n * view.current.scale * view.current.dpr) / (view.current.scale * view.current.dpr);
     const frogY = previous.current.frogY + (s.frogY - previous.current.frogY) * alpha;
     const groundOffset = previous.current.ground + (s.groundOffset - previous.current.ground) * alpha;
-    const bgOffset = groundOffset * TUNING.parallaxFar;
 
 
     for (const ob of s.obstacles) drawObstacle(ctx, imgs, pixel((ob.previousX ?? ob.x) + (ob.x - (ob.previousX ?? ob.x)) * alpha), groundY, ob.w, ob.h, ob.kind);
@@ -502,8 +501,8 @@ export default function FrogRunner() {
       if (!ctx || !canvas) { id = requestAnimationFrame(tick); return; }
       const c = clock.current;
       const dt = c.last ? time - c.last : TUNING.stepMs;
-      const began = performance.now(); const beforeWorld = stateRef.current.groundOffset;
-      let expectedDistance = 0; let steps = 0;
+      const began = performance.now();
+      let steps = 0;
       const active = !pausedRef.current && (stateRef.current.gameState === "playing" || stateRef.current.gameState === "dying");
       c.last = time; c.frameMs = dt; c.fps += (1000 / Math.max(1, dt) - c.fps) * 0.05;
       if (countdownRemaining.current > 0 && !document.hidden) {
@@ -516,7 +515,6 @@ export default function FrogRunner() {
       if (!pausedRef.current) {
         const advance = accumulateFrame(c.accumulator, dt); steps = advance.steps; c.accumulator = advance.remainder;
         for (let i = 0; i < steps; i++) {
-          if (stateRef.current.gameState === 'playing' || stateRef.current.gameState === 'dying') expectedDistance += getDifficulty(stateRef.current.elapsed + TUNING.stepMs).speed * TUNING.stepMs;
           simulate(TUNING.stepMs);
         }
       } else c.accumulator = 0;
