@@ -1,4 +1,9 @@
 # Gameplay polish
+- [ ] Measure desktop/mobile frame costs and identify stutter sources
+- [ ] Real-time accumulator, single world position and simulation-driven timers
+- [ ] Reduce rendering/collision costs, cap resolution and adapt quality
+- [ ] Upgrade D diagnostics and clipboard report
+- [ ] Run focused tests and desktop/mobile gameplay checks; report measured limits
 - [x] Fixed-step simulation, logical camera, image preload and cached rendering
 - [x] Variable jump, buffered input, grounded animation and pooled effects
 - [x] Desktop frame, mobile HUD, fullscreen, keyboard-safe menus and pause countdown
