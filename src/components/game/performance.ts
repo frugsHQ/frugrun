@@ -18,6 +18,8 @@ export class PerformanceMeter {
   private count = 0;
   private slow = 0;
   private fast = 0;
+  private qualityWindow = 0;
+  private qualityFrames = 0;
   quality = 0;
   record(time: number, frame: number, update: number, render: number, dom: number, steps: number, distance: number, expectedDistance: number, active: boolean) {
     const p = this.samples[this.cursor];
@@ -26,7 +28,11 @@ export class PerformanceMeter {
     p.expected = active && frame > 0 ? expectedDistance * 1000 / frame : 0;
     p.variance = p.expected > 0 ? Math.abs(p.speed / p.expected - 1) : 0;
     this.cursor = (this.cursor + 1) % this.samples.length; this.count = Math.min(this.count + 1, this.samples.length);
-    this.slow = frame > 18 ? this.slow + frame : 0;
+    this.qualityWindow += frame; this.qualityFrames++;
+    if (this.qualityWindow >= 1000) {
+      this.slow = this.qualityWindow / this.qualityFrames > 18 ? this.qualityWindow : 0;
+      this.qualityWindow = 0; this.qualityFrames = 0;
+    }
     this.fast = frame < 17.5 ? this.fast + frame : 0;
     const old = this.quality;
     if (this.slow >= 1000 && this.quality < 2) { this.quality++; this.slow = 0; this.fast = 0; }
