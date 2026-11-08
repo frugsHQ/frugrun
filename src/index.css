@@ -163,3 +163,7 @@ html, body, #root { overscroll-behavior: none; touch-action: none; }
 .game-debug pre { white-space: pre-wrap; margin: 0; font: inherit; }
 .game-debug canvas { display: block; max-width: 100%; }
 .speed-warning { color: hsl(var(--destructive)); }
+
+.scene-letterbox { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.scene-layer { position: absolute; max-width: none; pointer-events: none; will-change: transform; }
+.scene-foreground { z-index: 1; }

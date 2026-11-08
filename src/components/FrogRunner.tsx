@@ -21,7 +21,7 @@ import type { ObstacleKind } from "./game/constants";
 import type { DustParticle, Obstacle, GameState, MilestoneMsg, Coin } from "./game/types";
 import {
   loadGameImages, drawBackground, drawGround, drawForegroundGrass, warmSceneCache, drawObstacle, drawCoin,
-  drawFrogFallback, imageReady, OBSTACLE_ASPECT, prepareGameSprites, drawLetterbox, type GameImages,
+  drawFrogFallback, imageReady, OBSTACLE_ASPECT, prepareGameSprites, drawLetterbox, makeCompositedLayers, type GameImages,
 } from "./game/drawing";
 import { playSfxJump, playSfxScore, playSfxGameOver, playSfxCoin, playSfxHit } from "./game/sfx";
 import { StartOverlay, GameOverOverlay, LeaderboardOverlay } from "./game/overlays";
@@ -31,6 +31,10 @@ const RUN_FRAME_MS = TUNING.runStride; // logical distance per running cycle
 
 // ── Component ──────────────────────────────────────────────
 export default function FrogRunner() {
+  const layerRefs = useRef<(HTMLImageElement | null)[]>([]);
+  const layers = useRef<ReturnType<typeof makeCompositedLayers>>([]);
+  const foregroundRef = useRef<HTMLImageElement>(null);
+  const letterboxRef = useRef<HTMLImageElement>(null);
   const meter = useRef(new PerformanceMeter());
   const graphRef = useRef<HTMLCanvasElement>(null);
   const backdropRef = useRef<HTMLImageElement>(null);
@@ -135,16 +139,19 @@ export default function FrogRunner() {
     view.current = { width: logicalW, height: TUNING.logicalHeight, scale, dpr, x: (w - logicalW * scale) / 2, y: (h - TUNING.logicalHeight * scale) / 2 };
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
     canvas.style.width = w + "px"; canvas.style.height = h + "px";
-    const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
+    const ctx = canvas.getContext("2d", { alpha: true, desynchronized: true });
     ctx?.setTransform(dpr * scale, 0, 0, dpr * scale, view.current.x * dpr, view.current.y * dpr);
     if (ctx) ctx.imageSmoothingQuality = "high";
     stateRef.current.canvasW = logicalW; stateRef.current.canvasH = TUNING.logicalHeight;
     if (stateRef.current.onGround) stateRef.current.frogY = geom().restY;
     previous.current.frogY = stateRef.current.frogY; lastDrawn.current = null;
     if (imgsRef.current) {
+      layers.current = makeCompositedLayers(imgsRef.current, logicalW, TUNING.logicalHeight, scale * dpr);
+      for (let i = 0; i < layers.current.length; i++) { const el = layerRefs.current[i], layer = layers.current[i]; if (el) { el.src = layer.src; el.style.width = layer.width * scale + 'px'; el.style.height = TUNING.logicalHeight * scale + 'px'; el.style.left = view.current.x + 'px'; el.style.top = view.current.y + 'px'; } }
+      if (foregroundRef.current) { const layer = layers.current[3]; foregroundRef.current.src = layer.src; foregroundRef.current.style.width = layer.width * scale + 'px'; foregroundRef.current.style.height = TUNING.logicalHeight * scale + 'px'; foregroundRef.current.style.left = view.current.x + 'px'; foregroundRef.current.style.top = view.current.y + 'px'; foregroundRef.current.style.clipPath = `inset(${(TUNING.logicalHeight * TUNING.groundRatio - 3) * scale}px 0 ${(TUNING.logicalHeight - TUNING.logicalHeight * TUNING.groundRatio - 9) * scale}px 0)`; }
       const backdrop = document.createElement('canvas'); backdrop.width = Math.ceil(w * dpr); backdrop.height = Math.ceil(h * dpr);
       const bgCtx = backdrop.getContext('2d');
-      if (bgCtx) { drawLetterbox(bgCtx, imgsRef.current, backdrop.width, backdrop.height, 0); if (backdropRef.current) backdropRef.current.src = backdrop.toDataURL('image/jpeg'); }
+      if (bgCtx) { drawLetterbox(bgCtx, imgsRef.current, backdrop.width, backdrop.height, 0); const src = backdrop.toDataURL('image/jpeg'); if (backdropRef.current) backdropRef.current.src = src; if (letterboxRef.current) letterboxRef.current.src = src; }
     }
   }, []);
 
@@ -188,8 +195,7 @@ export default function FrogRunner() {
     const frogY = previous.current.frogY + (s.frogY - previous.current.frogY) * alpha;
     const groundOffset = previous.current.ground + (s.groundOffset - previous.current.ground) * alpha;
     const bgOffset = groundOffset * TUNING.parallaxFar;
-    drawBackground(ctx, imgs, W, H, bgOffset);
-    drawGround(ctx, imgs, W, groundY, H, pixel(groundOffset));
+
 
     for (const ob of s.obstacles) drawObstacle(ctx, imgs, pixel((ob.previousX ?? ob.x) + (ob.x - (ob.previousX ?? ob.x)) * alpha), groundY, ob.w, ob.h, ob.kind);
 
@@ -283,7 +289,7 @@ export default function FrogRunner() {
       else drawFrogFallback(ctx, frogX, frogY, frogW, frogH);
     }
 
-    drawForegroundGrass(ctx, imgs, W, groundY, H, pixel(groundOffset));
+
     for (const popup of popups.current) { if (popup.life <= 0) continue;
       ctx.globalAlpha = popup.life / 500; ctx.font = '18px "Lilita One"'; ctx.fillStyle = canvasColors.current.coin;
       ctx.fillText('+1', pixel(popup.x), pixel(popup.y - (500 - popup.life) * 0.04)); }
@@ -491,7 +497,7 @@ export default function FrogRunner() {
     if (!ready) return;
     let id = 0;
     const tick = (time: number) => {
-      const canvas = canvasRef.current; const ctx = canvas?.getContext('2d', { alpha: false, desynchronized: true });
+      const canvas = canvasRef.current; const ctx = canvas?.getContext('2d', { alpha: true, desynchronized: true });
       if (!ctx || !canvas) { id = requestAnimationFrame(tick); return; }
       const c = clock.current;
       const dt = c.last ? time - c.last : TUNING.stepMs;
@@ -514,10 +520,15 @@ export default function FrogRunner() {
         }
       } else c.accumulator = 0;
       const updateMs = performance.now() - began; const renderStart = performance.now();
-      if (imgsRef.current) {
-        ctx.save(); ctx.setTransform(view.current.dpr, 0, 0, view.current.dpr, 0, 0);
-        drawLetterbox(ctx, imgsRef.current, canvas.width / view.current.dpr, canvas.height / view.current.dpr, stateRef.current.bgOffset);
-        ctx.restore();
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.restore();
+      const interpolatedWorld = previous.current.ground + (stateRef.current.groundOffset - previous.current.ground) * (pausedRef.current ? 1 : c.accumulator / TUNING.stepMs);
+      for (let i = 0; i < layers.current.length; i++) {
+        const layer = layers.current[i], el = layerRefs.current[i];
+        let offset = -(interpolatedWorld * layer.fraction % layer.period) * view.current.scale;
+        if (i === 3) offset = Math.round(offset * view.current.dpr) / view.current.dpr;
+        const transform = `translate3d(${offset}px,0,0)`;
+        if (el) el.style.transform = transform;
+        if (i === 3 && foregroundRef.current) foregroundRef.current.style.transform = transform;
       }
       ctx.save(); ctx.beginPath(); ctx.rect(0, 0, view.current.width, view.current.height); ctx.clip();
       if (shakeRef.current > 0 && !pausedRef.current) { shakeRef.current = Math.max(0, shakeRef.current - dt); const amplitude = shakeRef.current / 300 * 7;
@@ -642,7 +653,7 @@ World ${m.speed.toFixed(1)} px/s · variance ${m.variance.toFixed(2)}%${m.varian
   const [fullscreen, setFullscreen] = useState(false);
   useEffect(() => { const change = () => setFullscreen(!!document.fullscreenElement); document.addEventListener('fullscreenchange', change); return () => document.removeEventListener('fullscreenchange', change); }, []);
   const comboElRef = useRef<HTMLSpanElement>(null);
-  const debugElRef = useRef<HTMLDivElement>(null);
+  const debugElRef = useRef<HTMLPreElement>(null);
   const canvasColors = useRef({ coin: '', debug: '', warning: '' });
   useEffect(() => { const styles = getComputedStyle(document.documentElement); canvasColors.current = { coin: `hsl(${styles.getPropertyValue('--accent')})`, debug: `hsl(${styles.getPropertyValue('--primary')})`, warning: `hsl(${styles.getPropertyValue('--destructive')})` }; }, []);
 
@@ -652,7 +663,10 @@ World ${m.speed.toFixed(1)} px/s · variance ${m.variance.toFixed(2)}%${m.varian
   return <main className="game-shell font-display">
     <img ref={backdropRef} className="game-backdrop" src={backgroundSrc} alt="" />
     <div ref={tileRef} className={`game-tile ${overlay === 'over' ? 'game-is-over' : ''}`} onPointerDown={handlePointerDown} onContextMenu={e => e.preventDefault()}>
+      <img ref={letterboxRef} className="scene-letterbox" alt="" />
+      {[0,1,2,3].map(i => <img key={i} ref={el => { layerRefs.current[i] = el; }} className="scene-layer" alt="" />)}
       <canvas ref={canvasRef} className="game-canvas" aria-label="Frug Run endless runner" />
+      <img ref={foregroundRef} className="scene-layer scene-foreground" alt="" />
       <div className="game-hud">
         <div className="hud-stats" aria-label="Run statistics">
           <div className="hud-score"><img src={logoSrc} alt="Frug Run" /><span>Score <b ref={scoreElRef}>0</b></span></div>
@@ -668,7 +682,7 @@ World ${m.speed.toFixed(1)} px/s · variance ${m.variance.toFixed(2)}%${m.varian
       {overlay === 'over' && <GameOverOverlay score={displayScore} best={displayBest} combo={displayCombo} coins={displayCoins} onRestart={startGame} onMenu={goToMenu} />}
       {overlay === 'leaderboard' && <LeaderboardOverlay onBack={goToMenu} />}
       {paused && <div className="pause-overlay" data-ui-button="resume"><Button onClick={resumeGame} className="wood-card">{countdown ?? 'Tap to resume'}</Button></div>}
-      {debug && <div className="game-debug" data-ui-button="debug"><pre ref={debugElRef} /><canvas ref={graphRef} width={240} height={40} aria-label="Measured world speed graph" /><Button variant="secondary" size="sm" onClick={async e => { e.stopPropagation(); try { await navigator.clipboard.writeText(lastReport.current); e.currentTarget.textContent = 'Copied'; } catch { if (debugElRef.current) debugElRef.current.textContent += '\nClipboard unavailable'; } }}>Copy report</Button></div>}
+      {debug && <div className="game-debug" data-ui-button="debug"><pre ref={debugElRef} /><canvas ref={graphRef} width={240} height={40} aria-label="Measured world speed graph" /><Button variant="secondary" size="sm" onClick={async e => { e.stopPropagation(); const button = e.currentTarget; try { await navigator.clipboard.writeText(lastReport.current); button.textContent = 'Copied'; } catch { if (debugElRef.current) debugElRef.current.textContent += '\nClipboard unavailable'; } }}>Copy report</Button></div>}
     </div>
   </main>;
 }
