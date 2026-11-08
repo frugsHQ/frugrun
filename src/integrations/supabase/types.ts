@@ -40,7 +40,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      submit_score: {
+        Args: { _name: string; _score: number }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
