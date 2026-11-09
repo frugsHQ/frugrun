@@ -158,13 +158,13 @@ export default function FrogRunner() {
     // Only bake the painted layers once the background and ground are actually decoded,
     // otherwise a blank/black frame would be cached until the next resize.
     if (imgsRef.current) {
-      layers.current = makeCompositedLayers(imgsRef.current, logicalW, TUNING.logicalHeight, scale * dpr);
+      layers.current = makeCompositedLayers(imgsRef.current, logicalW, TUNING.logicalHeight, scale * dpr, w / scale);
       const paint = (el: HTMLCanvasElement | null, layer: typeof layers.current[number]) => {
         if (!el) return;
         el.width = layer.canvas.width; el.height = layer.canvas.height;
         el.getContext('2d')?.drawImage(layer.canvas, 0, 0);
         el.style.width = layer.width * scale + 'px'; el.style.height = layer.height * scale + 'px';
-        el.style.left = view.current.x + 'px'; el.style.top = view.current.y + layer.top * scale + 'px';
+        el.style.left = '0px'; el.style.top = view.current.y + layer.top * scale + 'px';
       };
       for (let i = 0; i < layers.current.length; i++) paint(layerRefs.current[i], layers.current[i]);
       if (foregroundRef.current) { const layer = layers.current[3]; paint(foregroundRef.current, layer); foregroundRef.current.style.clipPath = `inset(${5 * scale}px 0 ${Math.max(0, layer.height - 17) * scale}px 0)`; }
@@ -545,7 +545,7 @@ export default function FrogRunner() {
       const ranges: string[] = []; coverageGap.current = false;
       for (let i = 0; i < layers.current.length; i++) {
         const layer = layers.current[i], el = layerRefs.current[i];
-        const range = layerCoverage(layer.width, layer.period, view.current.width, interpolatedWorld * layer.fraction);
+        const range = layerCoverage(layer.width, layer.period, canvas.clientWidth / view.current.scale, interpolatedWorld * layer.fraction);
         coverageGap.current ||= range.gap;
         let offset = range.left * view.current.scale;
         if (i === 3) offset = Math.round(offset * view.current.dpr) / view.current.dpr;
@@ -555,7 +555,7 @@ export default function FrogRunner() {
         if (debugRef.current) {
           ranges.push(`${['Far', 'Mid', 'Near', 'Ground/grass'][i]} ${range.left.toFixed(0)}…${range.right.toFixed(0)}${range.gap ? ' GAP!' : ''}`);
           ctx.save(); ctx.strokeStyle = range.gap ? canvasColors.current.warning : canvasColors.current.debug;
-          ctx.strokeRect(range.left, layer.top + 2, layer.width, 4); ctx.restore();
+          ctx.strokeRect(range.left - view.current.x / view.current.scale, layer.top + 2, layer.width, 4); ctx.restore();
         }
       }
       coverage.current = ranges.join('\n');

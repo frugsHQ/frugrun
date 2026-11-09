@@ -268,7 +268,7 @@ export function warmSceneCache(imgs: GameImages, W: number, H: number) {
 }
 
 /** Static device-sized artwork; only the compositor's translation changes during play. */
-export function makeCompositedLayers(imgs: GameImages, W: number, H: number, ratio: number) {
+export function makeCompositedLayers(imgs: GameImages, W: number, H: number, ratio: number, coverageWidth = W) {
   const bgReady = ready(imgs.bg), groundReady = ready(imgs.ground);
   const bgAspect = bgReady ? imgs.bg.naturalWidth / imgs.bg.naturalHeight : 1600 / 907;
   const bgH = Math.max(H, W / bgAspect);
@@ -282,7 +282,7 @@ export function makeCompositedLayers(imgs: GameImages, W: number, H: number, rat
     const physicalTileW = Math.max(2, Math.round(tileW * ratio));
     const stride = physicalTileW - 1;
     const period = stride * 2 / ratio;
-    const c = document.createElement('canvas'); c.width = Math.ceil((period + W) * ratio); c.height = Math.ceil(H * ratio);
+    const c = document.createElement('canvas'); c.width = Math.ceil((period + coverageWidth + 2 / ratio) * ratio); c.height = Math.ceil(H * ratio);
     const ctx = c.getContext('2d');
     if (ctx) {
       const image = index === 3 ? imgs.ground : imgs.bg;
