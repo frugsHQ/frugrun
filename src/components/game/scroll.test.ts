@@ -15,7 +15,7 @@ describe('Shared real-time scroll', () => {
   for (const [name, gapAt] of Object.entries(cadences)) {
     it(`${name}: 20s distance stays within 0.5% and each second within 2%`, () => {
       let wall = 0, sim = 0, accumulator = 0, world = 0, prior = 0, lastRender = 0, lastSecond = 0, lastSecondWorld = 0;
-      let frog = 436, priorFrog = frog, velocity = -1, lastFrog = frog;
+      let frog = 436, priorFrog = frog, velocity = -1, lastFrog = frog, lastObstacle = 10000;
       for (let i = 0; wall < 20000 - 1e-6; i++) {
         // Split frames at exact second boundaries to compare like intervals.
         const gap = Math.min(gapAt(i), 20000 - wall, (Math.floor((wall + 1e-6) / 1000) + 1) * 1000 - wall);
@@ -33,7 +33,11 @@ describe('Shared real-time scroll', () => {
         // Ground and fixed world anchors (obstacles/coins) share precisely this displacement.
         expect(render).toBeGreaterThanOrEqual(lastRender - 1e-8);
         expect(render - lastRender).toBeLessThanOrEqual(speed * gap + 1);
-        expect((10000 - lastRender) - (10000 - render)).toBeCloseTo(render - lastRender);
+        const obstacle = interpolate(10000 - prior, 10000 - world, accumulator / TUNING.stepMs);
+        expect(obstacle).toBeLessThanOrEqual(lastObstacle + 1e-8);
+        expect(lastObstacle - obstacle).toBeLessThanOrEqual(speed * gap + 1);
+        expect(Math.abs(obstacle + render - 10000)).toBeLessThan(1e-6);
+        lastObstacle = obstacle;
         // Frog stays horizontally anchored; its jump must be continuous vertically.
         expect(Math.abs(renderFrog - lastFrog)).toBeLessThanOrEqual(1.1 * gap + 1);
         lastFrog = renderFrog; lastRender = render; wall += gap;
