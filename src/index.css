@@ -138,8 +138,10 @@ html, body, #root { overscroll-behavior: none; touch-action: none; }
   .game-menu > div:last-child { flex-direction: row; justify-content: center; }
   .game-menu > p { margin-bottom: 2px; font-size: 16px; }
   .game-menu h2 { font-size: 26px; }
-  .game-is-over .game-menu { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
-  .game-is-over .game-menu > div { grid-column: 2; }
+  .game-is-over .game-menu { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(5, auto); gap: 2px 12px; align-content: center; }
+  .game-is-over .game-menu > h2 { grid-column: 1; grid-row: 1; }
+  .game-is-over .game-menu > p { grid-column: 1; margin: 0; }
+  .game-is-over .game-menu > div:not(:last-child) { grid-column: 2; grid-row: 1 / 5; align-self: center; margin: 0; }
   .hud-secondary { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .animate-fade-in { animation: none; } .game-menu, .game-menu button { transition: none; } }
@@ -155,8 +157,18 @@ html, body, #root { overscroll-behavior: none; touch-action: none; }
 @media (min-width: 1600px) { .hud-stats { font-size: 28px; padding: 10px 20px; } .hud-score img { width: 140px; height: 48px; } .hud-coins img { width: 36px; height: 36px; } .hud-secondary { font-size: 26px; } .music-player { width: 320px; } .music-title { font-size: 14px; } }
 /* Keep both replay commands fully visible on short screens. */
 @media (max-height: 500px) and (orientation: landscape) {
-  .game-is-over .game-menu > div:last-child { grid-column: 1 / -1; display: flex; flex-direction: row; flex-wrap: wrap; margin-bottom: 0; }
-  .game-is-over .game-menu > div:last-child button { white-space: nowrap; font-size: 18px; padding: 4px 12px; }
+  .game-overlay { padding: max(54px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+  .game-is-over .game-menu { max-height: 100%; width: min(600px, 94%); padding: clamp(6px, 2cqh, 12px); overflow: visible; }
+  .game-is-over .game-menu h2 { font-size: clamp(20px, 7cqh, 26px); margin: 0; }
+  .game-is-over .game-menu > p { font-size: clamp(13px, 4.5cqh, 18px); line-height: 1.2; }
+  .game-is-over .game-menu input { width: min(100%, 208px); font-size: 16px; padding: 5px 8px; }
+  .game-is-over .game-menu button { min-height: 40px; padding: 4px 10px; font-size: clamp(14px, 5cqh, 18px); }
+  .game-is-over .game-menu > div:last-child { grid-column: 1 / -1; grid-row: 5; display: flex; flex-direction: row; flex-wrap: nowrap; margin: 4px 0 0; }
+  .game-is-over .game-menu > div:last-child button { white-space: nowrap; }
+  .hud-stats { min-width: 0; gap: 10px; padding: 0 8px; font-size: 16px; }
+  .hud-stats button { min-height: 38px; height: 38px; }
+  .hud-score img { display: none; }
+  .hud-coins img { width: 20px; height: 20px; }
 }
 
 .game-debug { max-width: calc(100% - 24px); }
@@ -165,6 +177,9 @@ html, body, #root { overscroll-behavior: none; touch-action: none; }
 .speed-warning { color: hsl(var(--destructive)); }
 
 .scene-letterbox { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.game-tile { background: linear-gradient(hsl(200 65% 58%), hsl(142 40% 28%)); }
+.scene-layer { z-index: 0; }
+.game-canvas { z-index: 1; }
 .scene-layer { position: absolute; max-width: none; pointer-events: none; will-change: transform; }
 .scene-foreground { z-index: 1; }
 
