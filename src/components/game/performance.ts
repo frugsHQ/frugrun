@@ -13,7 +13,7 @@ export function bufferDpr(width: number, height: number, deviceDpr: number, mobi
     mobile ? PERFORMANCE.mobileLongSide / Math.max(width, height) : Math.min(PERFORMANCE.desktopWidth / width, PERFORMANCE.desktopHeight / height)) * Math.pow(0.85, quality);
 }
 export class PerformanceMeter {
-  private samples = Array.from({ length: 600 }, () => ({ time: 0, frame: 0, update: 0, render: 0, dom: 0, speed: 0, expected: 0, variance: 0, steps: 0 }));
+  private samples = Array.from({ length: 1600 }, () => ({ time: 0, frame: 0, update: 0, render: 0, dom: 0, speed: 0, expected: 0, variance: 0, steps: 0 }));
   private cursor = 0;
   private count = 0;
   private slow = 0;
@@ -49,12 +49,13 @@ export class PerformanceMeter {
     for (const p of rows) { distance += p.speed * p.frame; expected += p.expected * p.frame; }
     const variance = expected ? Math.abs(distance / expected - 1) * 100 : 0;
     const last = this.samples[(this.cursor + this.samples.length - 1) % this.samples.length];
-    return { fps: last.frame ? 1000 / last.frame : 0, avgFps: mean('frame') ? 1000 / mean('frame') : 0, minFps: worst ? 1000 / worst : 0, p95Fps: p95 ? 1000 / p95 : 0,
+    const maxDeviation = this.samples.slice(0, this.count).filter(p => now - p.time <= 10000 && p.expected > 0).reduce((max, p) => Math.max(max, p.variance * 100), 0);
+    return { maxDeviation, fps: last.frame ? 1000 / last.frame : 0, avgFps: mean('frame') ? 1000 / mean('frame') : 0, minFps: worst ? 1000 / worst : 0, p95Fps: p95 ? 1000 / p95 : 0,
       avgMs: mean('frame'), p95Ms: p95, worstMs: worst, update: mean('update'), render: mean('render'), dom: mean('dom'), steps: last.steps, variance,
       speed: rows.reduce((sum, p) => sum + p.speed, 0) / Math.max(1, rows.filter(p => p.expected > 0).length), graph: rows.filter(p => p.expected > 0).slice(-60).map(p => p.speed) };
   }
   report(now: number, dpr: number) {
     const s = this.summary(now);
-    return `Frug Run (last 5s)\nFPS avg/min/p95: ${s.avgFps.toFixed(1)}/${s.minFps.toFixed(1)}/${s.p95Fps.toFixed(1)}\nFrame avg/p95/worst: ${s.avgMs.toFixed(1)}/${s.p95Ms.toFixed(1)}/${s.worstMs.toFixed(1)} ms\nUpdate/render/DOM: ${s.update.toFixed(2)}/${s.render.toFixed(2)}/${s.dom.toFixed(2)} ms\nWorld speed: ${s.speed.toFixed(1)} px/s; variance: ${s.variance.toFixed(2)}%\nQuality: ${this.quality}; DPR used/device: ${dpr.toFixed(2)}/${window.devicePixelRatio}\n${navigator.userAgent}`;
+    return `Frug Run (last 5s)\nFPS avg/min/p95: ${s.avgFps.toFixed(1)}/${s.minFps.toFixed(1)}/${s.p95Fps.toFixed(1)}\nFrame avg/p95/worst: ${s.avgMs.toFixed(1)}/${s.p95Ms.toFixed(1)}/${s.worstMs.toFixed(1)} ms\nUpdate/render/DOM: ${s.update.toFixed(2)}/${s.render.toFixed(2)}/${s.dom.toFixed(2)} ms\nWorld speed: ${s.speed.toFixed(1)} px/s; variance: ${s.variance.toFixed(2)}%; max deviation (10s): ${s.maxDeviation.toFixed(2)}%\nQuality: ${this.quality}; DPR used/device: ${dpr.toFixed(2)}/${window.devicePixelRatio}\n${navigator.userAgent}`;
   }
 }

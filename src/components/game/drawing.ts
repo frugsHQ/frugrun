@@ -49,6 +49,18 @@ export function loadGameImages(): GameImages {
   };
 }
 
+export async function decodeGameImages(images: GameImages) {
+  await Promise.all([images.bg, images.ground, images.spikes, images.totem, images.coin, ...images.run, images.jump, images.fall].map(async img => {
+    if (!(img instanceof HTMLImageElement)) return;
+    const source = img.src;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try { await img.decode(); return; }
+      catch { if (!attempt) img.src = source + (source.includes('?') ? '&' : '?') + 'retry=1'; }
+    }
+    console.error(`[Frug Run] Failed to decode asset after retry: ${source}`);
+  }));
+}
+
 const ready = (img: HTMLImageElement | HTMLCanvasElement) => img instanceof HTMLCanvasElement ? img.width > 0 : img.complete && img.naturalWidth > 0;
 
 export function prepareGameSprites(images: GameImages) {
@@ -256,21 +268,49 @@ export function warmSceneCache(imgs: GameImages, W: number, H: number) {
 }
 
 /** Static device-sized artwork; only the compositor's translation changes during play. */
-export function makeCompositedLayers(imgs: GameImages, W: number, H: number, ratio: number) {
-  const bgH = Math.max(H, W * imgs.bg.naturalHeight / imgs.bg.naturalWidth);
-  const bgW = Math.round(imgs.bg.naturalWidth / imgs.bg.naturalHeight * bgH * ratio) / ratio;
+export function makeCompositedLayers(imgs: GameImages, W: number, H: number, ratio: number, coverageWidth = W) {
+  const bgReady = ready(imgs.bg), groundReady = ready(imgs.ground);
+  const bgAspect = bgReady ? imgs.bg.naturalWidth / imgs.bg.naturalHeight : 1600 / 907;
+  const bgH = Math.max(H, W / bgAspect);
+  const bgW = Math.round(bgAspect * bgH * ratio) / ratio;
   const groundY = H * TUNING.groundRatio, groundH = H - groundY + 8;
-  const groundW = Math.round(imgs.ground.naturalWidth / imgs.ground.naturalHeight * groundH * ratio) / ratio;
+  const groundW = Math.round((groundReady ? imgs.ground.naturalWidth / imgs.ground.naturalHeight : 2) * groundH * ratio) / ratio;
   return [TUNING.parallaxFar, TUNING.parallaxMid, TUNING.parallaxNear, 1].map((fraction, index) => {
     const tileW = index === 3 ? groundW : bgW, tileH = index === 3 ? groundH : bgH;
-    const period = tileW * 2 * Math.max(1, Math.ceil(W / (tileW * 2)));
-    const c = document.createElement('canvas'); c.width = Math.ceil((period + W) * ratio); c.height = Math.ceil(H * ratio);
+    // One mirrored pair is the repeat period. Paint the ENTIRE backing strip,
+    // not just W: translating a partially painted strip exposed transparent gaps.
+    const physicalTileW = Math.max(2, Math.round(tileW * ratio));
+    const stride = physicalTileW - 1;
+    const period = stride * 2 / ratio;
+    const c = document.createElement('canvas'); c.width = Math.ceil((period + coverageWidth + 2 / ratio) * ratio); c.height = Math.ceil(H * ratio);
     const ctx = c.getContext('2d');
-    if (ctx) { ctx.scale(ratio, ratio); drawMirroredTiles(ctx, index === 3 ? imgs.ground : imgs.bg, 0, index === 3 ? groundY - 8 : H - bgH, tileW, tileH, W, index === 3, index === 1 || index === 2 ? index - 1 : -1); }
+    if (ctx) {
+      const image = index === 3 ? imgs.ground : imgs.bg;
+      const y = (index === 3 ? groundY - 8 : H - bgH) * ratio;
+      if (ready(image)) {
+        for (let x = 0, tile = 0; x < c.width; x += stride, tile++) {
+          ctx.save(); ctx.translate(x + (tile % 2 ? physicalTileW : 0), y);
+          if (tile % 2) ctx.scale(-1, 1);
+          ctx.drawImage(image, 0, 0, physicalTileW, tileH * ratio); ctx.restore();
+        }
+      } else {
+        ctx.scale(ratio, ratio);
+        if (index === 3) drawGround(ctx, imgs, c.width / ratio, groundY, H, 0);
+        else drawBackground(ctx, imgs, c.width / ratio, H, 0);
+      }
+      if (index === 1 || index === 2) {
+        const top = H * (index === 1 ? .65 : .78), feather = (groundY - top) / 4;
+        ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'destination-in';
+        const mask = document.createElement('canvas'); mask.width = 1; mask.height = c.height;
+        const m = mask.getContext('2d');
+        if (m) for (let strip = 0; strip < 4; strip++) { m.fillStyle = `rgba(0,0,0,${(strip + 1) * (index === 1 ? .07 : .04)})`; m.fillRect(0, (top + strip * feather) * ratio, 1, feather * ratio + 1); }
+        ctx.drawImage(mask, 0, 0, c.width, c.height);
+      }
+    }
     const top = index === 3 ? groundY - 8 : index === 1 ? H * .65 : index === 2 ? H * .78 : 0;
     const bottom = index === 1 || index === 2 ? groundY : H;
     const cropped = document.createElement('canvas'); cropped.width = c.width; cropped.height = Math.ceil((bottom - top) * ratio);
     cropped.getContext('2d')?.drawImage(c, 0, -top * ratio);
-    return { src: cropped.toDataURL('image/png'), period, fraction, width: cropped.width / ratio, top, height: cropped.height / ratio };
+    return { canvas: cropped, period, fraction, width: cropped.width / ratio, top, height: cropped.height / ratio };
   });
 }

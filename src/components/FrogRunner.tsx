@@ -1,4 +1,5 @@
 import { accumulateFrame, bufferDpr, PerformanceMeter } from "./game/performance";
+import { worldDistance, interpolate, layerCoverage } from './game/scroll';
 import { startRun } from "./game/leaderboard";
 import { useRef, useEffect, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,7 @@ import {
 import type { ObstacleKind } from "./game/constants";
 import type { DustParticle, Obstacle, GameState, MilestoneMsg, Coin } from "./game/types";
 import {
-  loadGameImages, drawBackground, drawGround, drawForegroundGrass, warmSceneCache, drawObstacle, drawCoin,
+  loadGameImages, decodeGameImages, drawObstacle, drawCoin,
   drawFrogFallback, imageReady, OBSTACLE_ASPECT, prepareGameSprites, drawLetterbox, makeCompositedLayers, type GameImages,
 } from "./game/drawing";
 import { playSfxJump, playSfxScore, playSfxGameOver, playSfxCoin, playSfxHit } from "./game/sfx";
@@ -31,15 +32,17 @@ const RUN_FRAME_MS = TUNING.runStride; // logical distance per running cycle
 
 // ── Component ──────────────────────────────────────────────
 export default function FrogRunner() {
-  const layerRefs = useRef<(HTMLImageElement | null)[]>([]);
+  const layerRefs = useRef<(HTMLCanvasElement | null)[]>([]);
   const layers = useRef<ReturnType<typeof makeCompositedLayers>>([]);
-  const foregroundRef = useRef<HTMLImageElement>(null);
+  const foregroundRef = useRef<HTMLCanvasElement>(null);
   const letterboxRef = useRef<HTMLImageElement>(null);
   const meter = useRef(new PerformanceMeter());
   const graphRef = useRef<HTMLCanvasElement>(null);
   const backdropRef = useRef<HTMLImageElement>(null);
   const countdownRemaining = useRef(0);
-  const measurement = useRef({ world: 0, active: false });
+  const measurement = useRef({ world: 0, elapsed: 0, active: false });
+  const coverage = useRef('');
+  const coverageGap = useRef(false);
   const lastReport = useRef("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgsRef = useRef<GameImages | null>(null);
@@ -71,7 +74,7 @@ export default function FrogRunner() {
   const [debug, setDebug] = useState(false);
   const debugRef = useRef(false);
   const view = useRef({ width: 1000, height: 600, scale: 1, dpr: 1, x: 0, y: 0 });
-  const previous = useRef({ frogY: 0, ground: 0, bg: 0 });
+  const previous = useRef({ frogY: 0, ground: 0, bg: 0, elapsed: 0 });
   const particlePool = useRef(Array.from({ length: TUNING.particlePool }, () => ({ x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 1, size: 0 })));
   const obstaclePool = useRef(Array.from({ length: TUNING.obstaclePool }, () => ({ x: 0, w: 0, h: 0, kind: "spikes" as ObstacleKind, previousX: 0, worldX: 0 })));
   const coinPool = useRef(Array.from({ length: TUNING.coinPool }, () => ({ x: 0, y: 0, phase: 0, previousX: 0, worldX: 0 })));
@@ -120,11 +123,11 @@ export default function FrogRunner() {
 
   // ── Load all images once ──
   useEffect(() => { let active = true; const images = loadGameImages();
-    Promise.all([images.bg, images.ground, images.spikes, images.totem, images.coin, ...images.run, images.jump, images.fall].map(img => img instanceof HTMLImageElement ? img.decode() : Promise.resolve())).then(() => {
-      if (active) { prepareGameSprites(images); warmFrugLayers([...images.run, images.jump, images.fall]); imgsRef.current = images; warmSceneCache(images, stateRef.current.canvasW, stateRef.current.canvasH); setReady(true); resize(); }
-    }).catch(() => { if (active) { imgsRef.current = images; warmSceneCache(images, stateRef.current.canvasW, stateRef.current.canvasH); setReady(true); resize(); } });
+    void decodeGameImages(images).then(() => {
+      if (active) { prepareGameSprites(images); warmFrugLayers([...images.run, images.jump, images.fall]); imgsRef.current = images; resize(); setReady(true); }
+    });
     // Re-bake the scene whenever a late image finishes loading (e.g. a slow first visit).
-    const rebake = () => { if (active && imgsRef.current) { warmSceneCache(images, stateRef.current.canvasW, stateRef.current.canvasH); resize(); } };
+    const rebake = () => { if (active && imgsRef.current) resize(); };
     const late = [images.bg, images.ground].filter((img): img is HTMLImageElement => img instanceof HTMLImageElement);
     late.forEach(img => img.addEventListener('load', rebake));
     return () => { active = false; late.forEach(img => img.removeEventListener('load', rebake)); };
@@ -137,6 +140,7 @@ export default function FrogRunner() {
     const container = tileRef.current;
     if (!container) return;
     const w = container.clientWidth, h = container.clientHeight;
+    if (w <= 0 || h <= 0) return;
     const dpr = bufferDpr(w, h, window.devicePixelRatio || 1, matchMedia("(pointer: coarse)").matches || w < 700, meter.current.quality);
     const portrait = w / h < 0.8;
     const logicalW = portrait ? TUNING.logicalHeight * w / h : TUNING.desktopWidth;
@@ -149,13 +153,21 @@ export default function FrogRunner() {
     if (ctx) ctx.imageSmoothingQuality = "high";
     stateRef.current.canvasW = logicalW; stateRef.current.canvasH = TUNING.logicalHeight;
     if (stateRef.current.onGround) stateRef.current.frogY = geom().restY;
-    previous.current.frogY = stateRef.current.frogY; lastDrawn.current = null;
+    // A quality/DPR rebuild must not reset interpolation or airborne motion.
+    if (stateRef.current.onGround) previous.current.frogY = stateRef.current.frogY;
     // Only bake the painted layers once the background and ground are actually decoded,
     // otherwise a blank/black frame would be cached until the next resize.
-    if (imgsRef.current && imageReady(imgsRef.current.bg) && imageReady(imgsRef.current.ground)) {
-      layers.current = makeCompositedLayers(imgsRef.current, logicalW, TUNING.logicalHeight, scale * dpr);
-      for (let i = 0; i < layers.current.length; i++) { const el = layerRefs.current[i], layer = layers.current[i]; if (el) { el.src = layer.src; el.style.width = layer.width * scale + 'px'; el.style.height = layer.height * scale + 'px'; el.style.left = view.current.x + 'px'; el.style.top = view.current.y + layer.top * scale + 'px'; } }
-      if (foregroundRef.current) { const layer = layers.current[3]; foregroundRef.current.src = layer.src; foregroundRef.current.style.width = layer.width * scale + 'px'; foregroundRef.current.style.height = layer.height * scale + 'px'; foregroundRef.current.style.left = view.current.x + 'px'; foregroundRef.current.style.top = view.current.y + layer.top * scale + 'px'; foregroundRef.current.style.clipPath = `inset(${5 * scale}px 0 ${Math.max(0, layer.height - 17) * scale}px 0)`; }
+    if (imgsRef.current) {
+      layers.current = makeCompositedLayers(imgsRef.current, logicalW, TUNING.logicalHeight, scale * dpr, w / scale);
+      const paint = (el: HTMLCanvasElement | null, layer: typeof layers.current[number]) => {
+        if (!el) return;
+        el.width = layer.canvas.width; el.height = layer.canvas.height;
+        el.getContext('2d')?.drawImage(layer.canvas, 0, 0);
+        el.style.width = layer.width * scale + 'px'; el.style.height = layer.height * scale + 'px';
+        el.style.left = '0px'; el.style.top = view.current.y + layer.top * scale + 'px';
+      };
+      for (let i = 0; i < layers.current.length; i++) paint(layerRefs.current[i], layers.current[i]);
+      if (foregroundRef.current) { const layer = layers.current[3]; paint(foregroundRef.current, layer); foregroundRef.current.style.clipPath = `inset(${5 * scale}px 0 ${Math.max(0, layer.height - 17) * scale}px 0)`; }
       const backdrop = document.createElement('canvas'); backdrop.width = Math.ceil(w * dpr); backdrop.height = Math.ceil(h * dpr);
       const bgCtx = backdrop.getContext('2d');
       if (bgCtx) { drawLetterbox(bgCtx, imgsRef.current, backdrop.width, backdrop.height, 0); const src = backdrop.toDataURL('image/jpeg'); if (backdropRef.current) backdropRef.current.src = src; if (letterboxRef.current) letterboxRef.current.src = src; }
@@ -200,7 +212,7 @@ export default function FrogRunner() {
 
     const pixel = (n: number) => Math.round(n * view.current.scale * view.current.dpr) / (view.current.scale * view.current.dpr);
     const frogY = previous.current.frogY + (s.frogY - previous.current.frogY) * alpha;
-    const groundOffset = previous.current.ground + (s.groundOffset - previous.current.ground) * alpha;
+    const groundOffset = interpolate(previous.current.ground, s.groundOffset, alpha);
 
 
     for (const ob of s.obstacles) drawObstacle(ctx, imgs, pixel((ob.previousX ?? ob.x) + (ob.x - (ob.previousX ?? ob.x)) * alpha), groundY, ob.w, ob.h, ob.kind);
@@ -374,12 +386,12 @@ export default function FrogRunner() {
   // ── Main game loop ──
   const simulate = useCallback((dt: number) => {
     const s = stateRef.current;
-    previous.current.frogY = s.frogY; previous.current.ground = s.groundOffset; previous.current.bg = s.bgOffset;
+    previous.current.frogY = s.frogY; previous.current.ground = s.groundOffset; previous.current.bg = s.bgOffset; previous.current.elapsed = s.elapsed;
     for (const ob of s.obstacles) ob.previousX = ob.x;
     for (const coin of s.coinList) coin.previousX = coin.x;
     const { W, groundY, frogW, frogH, frogX, restY, scale } = geom();
-    if (s.gameState === 'dying') { s.elapsed += dt; s.deathTimer -= dt;
-      const move = getDifficulty(s.elapsed).speed * dt * 1;
+    if (s.gameState === 'dying') { const oldElapsed = s.elapsed; s.elapsed += dt; s.deathTimer -= dt;
+      const move = worldDistance(s.elapsed) - worldDistance(oldElapsed);
       s.groundOffset += move; s.bgOffset = s.groundOffset * TUNING.parallaxFar;
       for (const ob of s.obstacles) ob.x = (ob.worldX ?? ob.x + s.groundOffset - move) - s.groundOffset; for (const coin of s.coinList) coin.x = (coin.worldX ?? coin.x + s.groundOffset - move) - s.groundOffset;
       if (s.deathTimer <= 0) endGame(); return; }
@@ -387,12 +399,13 @@ export default function FrogRunner() {
       s.frogY = restY; previous.current.frogY = restY; s.onGround = true;
       s.groundOffset += DIFFICULTY.startSpeed * dt; s.bgOffset = s.groundOffset * TUNING.parallaxFar;
     } return; }
+    const oldElapsed = s.elapsed;
     s.elapsed += dt;
     const diff = getDifficulty(s.elapsed);
     const speed = diff.speed * scale;
 
     // Scroll the world
-    s.groundOffset += speed * dt;
+    s.groundOffset += worldDistance(s.elapsed) - worldDistance(oldElapsed);
     s.bgOffset = s.groundOffset * TUNING.parallaxFar;
 
     // Survival score
@@ -526,15 +539,26 @@ export default function FrogRunner() {
       } else c.accumulator = 0;
       const updateMs = performance.now() - began; const renderStart = performance.now();
       ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.restore();
-      const interpolatedWorld = previous.current.ground + (stateRef.current.groundOffset - previous.current.ground) * (pausedRef.current ? 1 : c.accumulator / TUNING.stepMs);
+      const alpha = pausedRef.current ? 1 : c.accumulator / TUNING.stepMs;
+      const interpolatedWorld = interpolate(previous.current.ground, stateRef.current.groundOffset, alpha);
+      const interpolatedElapsed = interpolate(previous.current.elapsed, stateRef.current.elapsed, alpha);
+      const ranges: string[] = []; coverageGap.current = false;
       for (let i = 0; i < layers.current.length; i++) {
         const layer = layers.current[i], el = layerRefs.current[i];
-        let offset = -(interpolatedWorld * layer.fraction % layer.period) * view.current.scale;
+        const range = layerCoverage(layer.width, layer.period, canvas.clientWidth / view.current.scale, interpolatedWorld * layer.fraction);
+        coverageGap.current ||= range.gap;
+        let offset = range.left * view.current.scale;
         if (i === 3) offset = Math.round(offset * view.current.dpr) / view.current.dpr;
         const transform = `translate3d(${offset}px,0,0)`;
         if (el) el.style.transform = transform;
         if (i === 3 && foregroundRef.current) foregroundRef.current.style.transform = transform;
+        if (debugRef.current) {
+          ranges.push(`${['Far', 'Mid', 'Near', 'Ground/grass'][i]} ${range.left.toFixed(0)}…${range.right.toFixed(0)}${range.gap ? ' GAP!' : ''}`);
+          ctx.save(); ctx.strokeStyle = range.gap ? canvasColors.current.warning : canvasColors.current.debug;
+          ctx.strokeRect(range.left - view.current.x / view.current.scale, layer.top + 2, layer.width, 4); ctx.restore();
+        }
       }
+      coverage.current = ranges.join('\n');
       ctx.save(); ctx.beginPath(); ctx.rect(0, 0, view.current.width, view.current.height); ctx.clip();
       if (shakeRef.current > 0 && !pausedRef.current) { shakeRef.current = Math.max(0, shakeRef.current - dt); const amplitude = shakeRef.current / 300 * 7;
         ctx.translate(Math.sin(time * 0.12) * amplitude, Math.cos(time * 0.15) * amplitude); }
@@ -555,8 +579,9 @@ export default function FrogRunner() {
 Frame avg/p95: ${m.avgMs.toFixed(1)}/${m.p95Ms.toFixed(1)} ms · steps ${m.steps}
 Update/render/DOM: ${m.update.toFixed(2)}/${m.render.toFixed(2)}/${m.dom.toFixed(2)} ms
 Canvas ${canvas.width}×${canvas.height} · DPR ${view.current.dpr.toFixed(2)} · Q${meter.current.quality}
-World ${m.speed.toFixed(1)} px/s · variance ${m.variance.toFixed(2)}%${m.variance > 3 ? ' — WARNING' : ''}`;
-          debugElRef.current.classList.toggle('speed-warning', m.variance > 3);
+World ${m.speed.toFixed(1)} px/s · variance ${m.variance.toFixed(2)}% · max 10s ${m.maxDeviation.toFixed(2)}%
+${coverage.current}${coverageGap.current ? '\nWARNING: uncovered stage' : ''}`;
+          debugElRef.current.classList.toggle('speed-warning', m.variance > 3 || coverageGap.current);
           lastReport.current = meter.current.report(time, view.current.dpr);
           const graph = graphRef.current?.getContext('2d');
           if (graph) { graph.clearRect(0, 0, 240, 40); graph.strokeStyle = m.variance > 3 ? canvasColors.current.warning : canvasColors.current.debug; graph.beginPath(); const max = Math.max(1, ...m.graph); m.graph.forEach((speed, i) => { const x = i * 240 / Math.max(1, m.graph.length - 1), y = 38 - speed / max * 34; if (i) graph.lineTo(x, y); else graph.moveTo(x, y); }); graph.stroke(); }
@@ -564,9 +589,9 @@ World ${m.speed.toFixed(1)} px/s · variance ${m.variance.toFixed(2)}%${m.varian
       }
       const measurable = active && measurement.current.active && dt <= 250;
       const measuredDistance = interpolatedWorld - measurement.current.world;
-      const targetDistance = getDifficulty(stateRef.current.elapsed).speed * dt;
+      const targetDistance = worldDistance(interpolatedElapsed) - worldDistance(measurement.current.elapsed);
       const changed = meter.current.record(time, dt, updateMs, renderMs, performance.now() - domStart, steps, measuredDistance, targetDistance, measurable);
-      measurement.current.world = interpolatedWorld; measurement.current.active = active;
+      measurement.current.world = interpolatedWorld; measurement.current.elapsed = interpolatedElapsed; measurement.current.active = active;
       if (changed) resize();
       id = requestAnimationFrame(tick);
     };
@@ -592,7 +617,7 @@ World ${m.speed.toFixed(1)} px/s · variance ${m.variance.toFixed(2)}%${m.varian
     triggeredMilestonesRef.current = new Set();
     s.elapsed = 0; s.spawnTimer = 0;
     s.nextSpawn = DIFFICULTY.startMaxSpawn;
-    s.lastTime = 0; clock.current.accumulator = 0; previous.current.frogY = s.frogY;
+    s.lastTime = 0; previous.current.frogY = s.frogY; previous.current.ground = s.groundOffset; previous.current.elapsed = 0; measurement.current.active = false;
     for (const p of particlePool.current) p.life = 0;
     for (const p of popups.current) p.life = 0;
     input.current.held = false; input.current.buffer = 0;
@@ -646,12 +671,17 @@ World ${m.speed.toFixed(1)} px/s · variance ${m.variance.toFixed(2)}%${m.varian
       if (e.code === 'Enter' && stateRef.current.gameState === 'over') { e.preventDefault(); startGame(); }
     };
     const keyup = (e: KeyboardEvent) => { if (['Space', 'ArrowUp', 'KeyW'].includes(e.code) && !editable(e.target)) { e.preventDefault(); release(); } };
-    const hidden = () => { if (document.hidden) pauseGame(); };
+    const hidden = () => { if (document.hidden) pauseGame(); else resize(); };
+    // DPR can change without a ResizeObserver notification (moving between monitors).
+    let dprQuery = matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+    const dprChanged = () => { resize(); dprQuery.removeEventListener('change', dprChanged); dprQuery = matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`); dprQuery.addEventListener('change', dprChanged); };
+    dprQuery.addEventListener('change', dprChanged);
+    window.addEventListener('resize', resize);
     window.addEventListener('keydown', keydown); window.addEventListener('keyup', keyup);
     window.addEventListener('pointerup', release); window.addEventListener('pointercancel', release);
     window.addEventListener('blur', pauseGame); window.addEventListener('orientationchange', pauseGame);
     document.addEventListener('visibilitychange', hidden);
-    return () => { observer.disconnect(); countdownRemaining.current = 0;
+    return () => { observer.disconnect(); countdownRemaining.current = 0; dprQuery.removeEventListener('change', dprChanged); window.removeEventListener('resize', resize);
       window.removeEventListener('keydown', keydown); window.removeEventListener('keyup', keyup); window.removeEventListener('pointerup', release); window.removeEventListener('pointercancel', release);
       window.removeEventListener('blur', pauseGame); window.removeEventListener('orientationchange', pauseGame); document.removeEventListener('visibilitychange', hidden); };
   }, [resize, press, release, pauseGame, startGame]);
@@ -673,9 +703,9 @@ World ${m.speed.toFixed(1)} px/s · variance ${m.variance.toFixed(2)}%${m.varian
     <img ref={backdropRef} className="game-backdrop" src={backgroundSrc} alt="" />
     <div ref={tileRef} className={`game-tile ${overlay === 'over' ? 'game-is-over' : ''}`} onPointerDown={handlePointerDown} onContextMenu={e => e.preventDefault()}>
       <img ref={letterboxRef} className="scene-letterbox" alt="" />
-      {[0,1,2,3].map(i => <img key={i} ref={el => { layerRefs.current[i] = el; }} className="scene-layer" alt="" />)}
+      {[0,1,2,3].map(i => <canvas key={i} ref={el => { layerRefs.current[i] = el; }} className="scene-layer" aria-hidden="true" />)}
       <canvas ref={canvasRef} className="game-canvas" aria-label="Frug Run endless runner" />
-      <img ref={foregroundRef} className="scene-layer scene-foreground" alt="" />
+      <canvas ref={foregroundRef} className="scene-layer scene-foreground" aria-hidden="true" />
       <div className="game-hud">
         <div className="hud-stats" aria-label="Run statistics">
           <div className="hud-score"><img src={logoSrc} alt="Frug Run" /><span>Score <b ref={scoreElRef}>0</b></span></div>

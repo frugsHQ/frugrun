@@ -4,5 +4,6 @@
 - Use a fixed logical game height and orientation-specific view width with uniform scaling, so physics and sprite sizes are independent of display pixels.
 - Normalize sprite frames and derive alpha-based geometry once at preload; share pose transforms and rendered swept collision shapes with debug guides so visible and physical anchors cannot diverge.
 - Keep the swappable background import in the drawing module so the scene, letterbox fill and surrounding backdrop always use the same artwork.
-- Pre-render painted layers and static letterbox fills on resize, then translate cropped image layers with the compositor; reserve the transparent gameplay canvas for moving sprites to avoid full-scene resampling.
+- Pre-render complete mirrored strips into synchronous canvas compositor layers on resize; translate them without per-frame scaling and keep letterbox fills static, avoiding asynchronous image decoding and unpainted strip gaps.
+- Integrate the existing difficulty curve in one scroll module and share leftover-step interpolation and coverage calculations with tests, so cadence and quality rebuilds cannot alter world movement.
 - Keep frame accumulation, resolution limits, adaptive quality and rolling measurements in the performance module; quality changes must never alter simulation tuning or world motion.
