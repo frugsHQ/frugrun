@@ -1,9 +1,10 @@
 # Current regression fixes
-- [ ] Decode/retry assets, synchronous scene layers, visibility/size/DPR rebuilds and fallback
-- [ ] Mirrored full-width coverage and D coverage diagnostics
-- [ ] Cadence/interpolation tests and 10-second speed deviation
-- [ ] Landscape card/HUD verification at requested sizes
-- [ ] Production verification and measured before/after report
+- [x] Decode/retry assets, synchronous scene layers, visibility/size/DPR rebuilds and fallback; preview verified
+- [x] Mirrored full-width coverage and D coverage diagnostics, including physical tile side margins
+- [x] Cadence/interpolation tests and 10-second speed deviation; 25 focused tests pass
+- [x] Landscape card/HUD verification at 844×390, 932×430, 667×375 and 1024×768
+- [ ] Verify fixes in production: waiting for permission to publish; old production visit did not reproduce persistent black scene
+- [ ] Consistent desktop 60 FPS: measured 22.7ms average / 33.4ms p95; rendering/overall frame performance remains below target
 
 # Gameplay polish
 - [x] Measure desktop/mobile frame costs and identify stutter sources
