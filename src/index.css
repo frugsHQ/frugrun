@@ -26,6 +26,8 @@
     --wood-dark: 22 55% 14%;
     --popover: 142 35% 15%;
     --popover-foreground: 80 60% 95%;
+    --scene-sky: 200 65% 58%;
+    --scene-fallback-ground: 142 40% 28%;
   }
 }
 
@@ -181,7 +183,7 @@ html, body, #root { overscroll-behavior: none; touch-action: none; }
 .speed-warning { color: hsl(var(--destructive)); }
 
 .scene-letterbox { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.game-tile { background: linear-gradient(hsl(200 65% 58%), hsl(142 40% 28%)); }
+.game-tile { background: linear-gradient(hsl(var(--scene-sky)), hsl(var(--scene-fallback-ground))); }
 .scene-layer { z-index: 0; }
 .game-canvas { z-index: 1; }
 .scene-layer { position: absolute; max-width: none; pointer-events: none; will-change: transform; }

@@ -1,6 +1,7 @@
 import { ALPHA_THRESHOLD, BODY_ANCHOR, FOOT_BASELINE, NORMALIZED_SIZE, scanPixels, silhouetteBoxes, spriteInfo, CAPE_SWAY_AMOUNT, HAT_SWAY_AMOUNT, SWAY_LAG, type Pose } from './spriteGeometry';
 
 function pixels(image: HTMLImageElement) {
+  if (!image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0) return null;
   const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return null;
@@ -59,7 +60,10 @@ export function drawFrug(ctx: CanvasRenderingContext2D, frame: HTMLCanvasElement
 
 /** Warm color-separated layers before any running/jumping pose is first displayed. */
 export function warmFrugLayers(frames: (HTMLCanvasElement | HTMLImageElement)[]) {
-  for (const frame of frames) regionalLayers(frame);
+  for (const frame of frames) {
+    if (frame instanceof HTMLImageElement && (!frame.complete || frame.naturalWidth <= 0)) continue;
+    regionalLayers(frame);
+  }
 }
 
 const layerCache = new WeakMap<CanvasImageSource, { body: HTMLCanvasElement; cape: HTMLCanvasElement; hat: HTMLCanvasElement }>();
