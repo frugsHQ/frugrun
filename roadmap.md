@@ -1,3 +1,10 @@
+# Current regression fixes
+- [ ] Decode/retry assets, synchronous scene layers, visibility/size/DPR rebuilds and fallback
+- [ ] Mirrored full-width coverage and D coverage diagnostics
+- [ ] Cadence/interpolation tests and 10-second speed deviation
+- [ ] Landscape card/HUD verification at requested sizes
+- [ ] Production verification and measured before/after report
+
 # Gameplay polish
 - [x] Measure desktop/mobile frame costs and identify stutter sources
 - [x] Real-time accumulator, world-derived entity positions and simulation-driven gameplay timers
