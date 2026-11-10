@@ -53,9 +53,17 @@ export async function decodeGameImages(images: GameImages) {
   await Promise.all([images.bg, images.ground, images.spikes, images.totem, images.coin, ...images.run, images.jump, images.fall].map(async img => {
     if (!(img instanceof HTMLImageElement)) return;
     const source = img.src;
+    // Wait for an actual load (or error) before decoding, so a retry never aborts mid-fetch.
+    const loaded = () => new Promise<void>(resolve => {
+      if (img.complete && img.naturalWidth > 0) return resolve();
+      img.addEventListener('load', () => resolve(), { once: true });
+      img.addEventListener('error', () => resolve(), { once: true });
+    });
     for (let attempt = 0; attempt < 2; attempt++) {
-      try { await img.decode(); return; }
-      catch { if (!attempt) img.src = source + (source.includes('?') ? '&' : '?') + 'retry=1'; }
+      await loaded();
+      try { if (img.naturalWidth > 0) { await img.decode(); return; } } catch { /* retry below */ }
+      if (img.complete && img.naturalWidth > 0) return;
+      if (!attempt) img.src = source + (source.includes('?') ? '&' : '?') + 'retry=1';
     }
     console.error(`[Frug Run] Failed to decode asset after retry: ${source}`);
   }));

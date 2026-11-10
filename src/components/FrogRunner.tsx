@@ -168,9 +168,6 @@ export default function FrogRunner() {
       };
       for (let i = 0; i < layers.current.length; i++) paint(layerRefs.current[i], layers.current[i]);
       if (foregroundRef.current) { const layer = layers.current[3]; paint(foregroundRef.current, layer); foregroundRef.current.style.clipPath = `inset(${5 * scale}px 0 ${Math.max(0, layer.height - 17) * scale}px 0)`; }
-      const backdrop = document.createElement('canvas'); backdrop.width = Math.ceil(w * dpr); backdrop.height = Math.ceil(h * dpr);
-      const bgCtx = backdrop.getContext('2d');
-      if (bgCtx) { drawLetterbox(bgCtx, imgsRef.current, backdrop.width, backdrop.height, 0); const src = backdrop.toDataURL('image/jpeg'); if (backdropRef.current) backdropRef.current.src = src; if (letterboxRef.current) letterboxRef.current.src = src; }
     }
   }, []);
 
@@ -702,7 +699,6 @@ ${coverage.current}${coverageGap.current ? '\nWARNING: uncovered stage' : ''}`;
   return <main className="game-shell font-display">
     <img ref={backdropRef} className="game-backdrop" src={backgroundSrc} alt="" />
     <div ref={tileRef} className={`game-tile ${overlay === 'over' ? 'game-is-over' : ''}`} onPointerDown={handlePointerDown} onContextMenu={e => e.preventDefault()}>
-      <img ref={letterboxRef} className="scene-letterbox" alt="" />
       {[0,1,2,3].map(i => <canvas key={i} ref={el => { layerRefs.current[i] = el; }} className="scene-layer" aria-hidden="true" />)}
       <canvas ref={canvasRef} className="game-canvas" aria-label="Frug Run endless runner" />
       <canvas ref={foregroundRef} className="scene-layer scene-foreground" aria-hidden="true" />
