@@ -147,7 +147,7 @@ export default function FrogRunner() {
     view.current = { width: logicalW, height: TUNING.logicalHeight, scale, dpr, x: (w - logicalW * scale) / 2, y: (h - TUNING.logicalHeight * scale) / 2 };
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
     canvas.style.width = w + "px"; canvas.style.height = h + "px";
-    const ctx = canvas.getContext("2d", { alpha: true, desynchronized: true });
+    const ctx = canvas.getContext("2d", { alpha: true });
     ctx?.setTransform(dpr * scale, 0, 0, dpr * scale, view.current.x * dpr, view.current.y * dpr);
     if (ctx) ctx.imageSmoothingQuality = "high";
     stateRef.current.canvasW = logicalW; stateRef.current.canvasH = TUNING.logicalHeight;
@@ -512,7 +512,7 @@ export default function FrogRunner() {
     if (!ready) return;
     let id = 0;
     const tick = (time: number) => {
-      const canvas = canvasRef.current; const ctx = canvas?.getContext('2d', { alpha: true, desynchronized: true });
+      const canvas = canvasRef.current; const ctx = canvas?.getContext('2d', { alpha: true });
       if (!ctx || !canvas) { id = requestAnimationFrame(tick); return; }
       const c = clock.current;
       const dt = c.last ? time - c.last : TUNING.stepMs;
