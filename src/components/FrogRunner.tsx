@@ -22,7 +22,7 @@ import type { ObstacleKind } from "./game/constants";
 import type { DustParticle, Obstacle, GameState, MilestoneMsg, Coin } from "./game/types";
 import {
   loadGameImages, decodeGameImages, drawObstacle, drawCoin,
-  drawFrogFallback, imageReady, OBSTACLE_ASPECT, prepareGameSprites, drawLetterbox, makeCompositedLayers, type GameImages,
+  drawFrogFallback, imageReady, OBSTACLE_ASPECT, prepareGameSprites, makeCompositedLayers, type GameImages,
 } from "./game/drawing";
 import { playSfxJump, playSfxScore, playSfxGameOver, playSfxCoin, playSfxHit } from "./game/sfx";
 import { StartOverlay, GameOverOverlay, LeaderboardOverlay } from "./game/overlays";
@@ -35,7 +35,6 @@ export default function FrogRunner() {
   const layerRefs = useRef<(HTMLCanvasElement | null)[]>([]);
   const layers = useRef<ReturnType<typeof makeCompositedLayers>>([]);
   const foregroundRef = useRef<HTMLCanvasElement>(null);
-  const letterboxRef = useRef<HTMLImageElement>(null);
   const meter = useRef(new PerformanceMeter());
   const graphRef = useRef<HTMLCanvasElement>(null);
   const backdropRef = useRef<HTMLImageElement>(null);
