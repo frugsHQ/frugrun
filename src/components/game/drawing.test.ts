@@ -8,7 +8,9 @@ describe('Scene asset failures', () => {
     const unique = [...new Set(assets)];
     const decoders = unique.map(image => {
       const decode = vi.fn().mockRejectedValue(new Error('offline'));
-      Object.defineProperty(image, 'decode', { value: decode }); return decode;
+      Object.defineProperty(image, 'decode', { value: decode });
+      Object.defineProperty(image, 'complete', { value: true }); // jsdom never fires load/error
+      return decode;
     });
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     await decodeGameImages(images);

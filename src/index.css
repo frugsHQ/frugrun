@@ -182,12 +182,12 @@ html, body, #root { overscroll-behavior: none; touch-action: none; }
 .game-debug canvas { display: block; max-width: 100%; }
 .speed-warning { color: hsl(var(--destructive)); }
 
-.scene-letterbox { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.game-backdrop { filter: blur(18px) brightness(0.38); transform: scale(1.05); }
 .game-tile { background: linear-gradient(hsl(var(--scene-sky)), hsl(var(--scene-fallback-ground))); }
-.scene-layer { z-index: 0; }
-.game-canvas { z-index: 1; }
+.scene-layer { z-index: 1; }
+.game-canvas { z-index: 2; }
 .scene-layer { position: absolute; max-width: none; pointer-events: none; will-change: transform; }
-.scene-foreground { z-index: 1; }
+.scene-foreground { z-index: 3; }
 
 .game-debug { pointer-events: none; }
 .game-debug button { pointer-events: auto; }

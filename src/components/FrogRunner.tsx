@@ -22,7 +22,7 @@ import type { ObstacleKind } from "./game/constants";
 import type { DustParticle, Obstacle, GameState, MilestoneMsg, Coin } from "./game/types";
 import {
   loadGameImages, decodeGameImages, drawObstacle, drawCoin,
-  drawFrogFallback, imageReady, OBSTACLE_ASPECT, prepareGameSprites, drawLetterbox, makeCompositedLayers, type GameImages,
+  drawFrogFallback, imageReady, OBSTACLE_ASPECT, prepareGameSprites, makeCompositedLayers, type GameImages,
 } from "./game/drawing";
 import { playSfxJump, playSfxScore, playSfxGameOver, playSfxCoin, playSfxHit } from "./game/sfx";
 import { StartOverlay, GameOverOverlay, LeaderboardOverlay } from "./game/overlays";
@@ -35,7 +35,6 @@ export default function FrogRunner() {
   const layerRefs = useRef<(HTMLCanvasElement | null)[]>([]);
   const layers = useRef<ReturnType<typeof makeCompositedLayers>>([]);
   const foregroundRef = useRef<HTMLCanvasElement>(null);
-  const letterboxRef = useRef<HTMLImageElement>(null);
   const meter = useRef(new PerformanceMeter());
   const graphRef = useRef<HTMLCanvasElement>(null);
   const backdropRef = useRef<HTMLImageElement>(null);
@@ -168,9 +167,6 @@ export default function FrogRunner() {
       };
       for (let i = 0; i < layers.current.length; i++) paint(layerRefs.current[i], layers.current[i]);
       if (foregroundRef.current) { const layer = layers.current[3]; paint(foregroundRef.current, layer); foregroundRef.current.style.clipPath = `inset(${5 * scale}px 0 ${Math.max(0, layer.height - 17) * scale}px 0)`; }
-      const backdrop = document.createElement('canvas'); backdrop.width = Math.ceil(w * dpr); backdrop.height = Math.ceil(h * dpr);
-      const bgCtx = backdrop.getContext('2d');
-      if (bgCtx) { drawLetterbox(bgCtx, imgsRef.current, backdrop.width, backdrop.height, 0); const src = backdrop.toDataURL('image/jpeg'); if (backdropRef.current) backdropRef.current.src = src; if (letterboxRef.current) letterboxRef.current.src = src; }
     }
   }, []);
 
@@ -702,7 +698,6 @@ ${coverage.current}${coverageGap.current ? '\nWARNING: uncovered stage' : ''}`;
   return <main className="game-shell font-display">
     <img ref={backdropRef} className="game-backdrop" src={backgroundSrc} alt="" />
     <div ref={tileRef} className={`game-tile ${overlay === 'over' ? 'game-is-over' : ''}`} onPointerDown={handlePointerDown} onContextMenu={e => e.preventDefault()}>
-      <img ref={letterboxRef} className="scene-letterbox" alt="" />
       {[0,1,2,3].map(i => <canvas key={i} ref={el => { layerRefs.current[i] = el; }} className="scene-layer" aria-hidden="true" />)}
       <canvas ref={canvasRef} className="game-canvas" aria-label="Frug Run endless runner" />
       <canvas ref={foregroundRef} className="scene-layer scene-foreground" aria-hidden="true" />
