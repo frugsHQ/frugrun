@@ -74,6 +74,7 @@ export default function FrogRunner() {
   const debugRef = useRef(false);
   const view = useRef({ width: 1000, height: 600, scale: 1, dpr: 1, x: 0, y: 0 });
   const previous = useRef({ frogY: 0, ground: 0, bg: 0, elapsed: 0 });
+  const poseSmooth = useRef({ sx: 1, sy: 1, rot: 0 });
   const particlePool = useRef(Array.from({ length: TUNING.particlePool }, () => ({ x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 1, size: 0 })));
   const obstaclePool = useRef(Array.from({ length: TUNING.obstaclePool }, () => ({ x: 0, w: 0, h: 0, kind: "spikes" as ObstacleKind, previousX: 0, worldX: 0 })));
   const coinPool = useRef(Array.from({ length: TUNING.coinPool }, () => ({ x: 0, y: 0, phase: 0, previousX: 0, worldX: 0 })));
@@ -239,6 +240,7 @@ export default function FrogRunner() {
 
     // ── Squash & stretch + small tilt ──
     let sx = 1, sy = 1, rot = 0;
+    const smooth = poseSmooth.current;
     if (!s.onGround) {
       sx = 0.96; sy = 1.05;
       rot = Math.max(-0.12, Math.min(0.12, s.frogVY * 0.15));
@@ -250,6 +252,9 @@ export default function FrogRunner() {
       sy = 1 + Math.sin(groundOffset / RUN_FRAME_MS * Math.PI * 4) * 0.012;
       rot = Math.sin(groundOffset / RUN_FRAME_MS * Math.PI * 2) * 0.012;
     }
+    // Ease tilt and squash so takeoff/landing never snap between poses.
+    smooth.sx += (sx - smooth.sx) * 0.3; smooth.sy += (sy - smooth.sy) * 0.3; smooth.rot += (rot - smooth.rot) * 0.2;
+    sx = smooth.sx; sy = smooth.sy; rot = smooth.rot;
     const pose: Pose = { x: pixel(frogX + frogW / 2), y: frogY + frogH, scaleX: frogW / 420 * sx, scaleY: frogH / 420 * sy, rotation: rot };
     const polygons = (spriteInfo.get(frame)?.boxes ?? []).map(box => transformBox(box, pose));
     let bodyMinX = Infinity, bodyMaxX = -Infinity, bodyMinY = Infinity, bodyMaxY = -Infinity;
@@ -266,14 +271,16 @@ export default function FrogRunner() {
       const shapes = (spriteInfo.get(image)?.boxes ?? []).map(box => rectangle({ x: x + box.x * ob.w / image.naturalWidth, y: groundY - ob.h + ob.h * 0.06 + box.y * ob.h / image.naturalHeight, w: box.w * ob.w / image.naturalWidth, h: box.h * ob.h / image.naturalHeight }));
       obstaclePolygons.push(...shapes);
       if (s.gameState !== 'playing' || !canDamage(s.invuln, hitObstacles.current.has(ob))) continue;
-      const last = lastDrawn.current;
-      const priorX = last?.obstacles.get(ob) ?? x;
-      const delta = { x: pose.x - (last?.pose.x ?? pose.x) - (x - priorX), y: pose.y - (last?.pose.y ?? pose.y) };
-      const collision = polygons.some(poly => shapes.some(shape => sweptOverlap(poly, shape, { x: 0, y: 0 }))) ||
-        (last?.polygons ?? polygons).some(poly => shapes.some(shape => {
-          const priorShape = shape.map(p => ({ x: p.x + priorX - x, y: p.y }));
-          return sweptOverlap(poly, priorShape, delta);
-        }));
+      // An obstacle already behind Frug's body can never hurt him.
+      if (x + ob.w < bodyMinX) continue;
+      // Sweep only the obstacle's horizontal travel against Frug's current pose,
+      // so a landing never extrudes him back through something he already cleared.
+      const priorX = prior;
+      const delta = { x: priorX - x, y: 0 };
+      const collision = polygons.some(poly => shapes.some(shape => {
+        const priorShape = priorX === x ? shape : shape.map(p => ({ x: p.x + priorX - x, y: p.y }));
+        return sweptOverlap(poly, priorShape, delta);
+      }));
       if (collision) {
         hitObstacles.current.add(ob); s.lives -= 1; setLives(s.lives); s.combo = 1;
         s.invuln = HIT_INVULN_MS; shakeRef.current = 200; playSfxHit(mutedRef);

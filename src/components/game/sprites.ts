@@ -50,7 +50,7 @@ export function drawFrug(ctx: CanvasRenderingContext2D, frame: HTMLCanvasElement
   ctx.drawImage(layers.body, -BODY_ANCHOR, -FOOT_BASELINE);
   for (const [name, amount, lag] of [['cape', CAPE_SWAY_AMOUNT, SWAY_LAG], ['hat', HAT_SWAY_AMOUNT, SWAY_LAG * 1.4]] as const) {
     const layer = layers[name];
-    const offset = Math.sin(phase - lag) * amount + (name === 'cape' ? -Math.min(2, speed * 3) + Math.max(-1, Math.min(1, vy)) : -Math.max(-1, Math.min(1, vy)));
+    const offset = Math.sin(phase - lag) * amount + (name === 'cape' ? -Math.min(2, speed * 3) + Math.max(-1, Math.min(1, vy * 0.6)) : -Math.max(-1, Math.min(1, vy * 0.6)));
     const logicalToSource = 420 / 88;
     ctx.save(); ctx.transform(1, 0, offset * logicalToSource / 240, 1, offset * logicalToSource, 0);
     ctx.drawImage(layer, -BODY_ANCHOR, -FOOT_BASELINE); ctx.restore();
