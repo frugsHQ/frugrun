@@ -43,7 +43,13 @@ export function silhouetteBoxes(mask: Uint8Array, width: number, height: number,
       if (!filled && start >= 0) { result.push({ x: start, y, w: x - start, h: cell }); start = -1; }
     }
   }
-  return result;
+  // Merge identical runs in consecutive rows: same exact shape, far fewer boxes to test.
+  const merged: Box[] = [];
+  for (const box of result) {
+    const above = merged.find(m => m.x === box.x && m.w === box.w && m.y + m.h === box.y);
+    if (above) above.h += box.h; else merged.push({ ...box });
+  }
+  return merged;
 }
 
 export function transformBox(box: Box, pose: Pose): Point[] {
