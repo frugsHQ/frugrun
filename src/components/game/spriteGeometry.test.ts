@@ -34,4 +34,14 @@ describe('Sprite-accurate collision rules', () => {
     expect(canDamage(0, true)).toBe(false);
     expect(canDamage(0, false)).toBe(true);
   });
+  it('does not hit an obstacle Frug cleared when he lands beside it', () => {
+    const landed = rectangle({ x: 0, y: 0, w: 10, h: 10 });
+    const behind = rectangle({ x: -8, y: 0, w: 5, h: 10 });
+    expect(sweptOverlap(landed, behind, { x: 4, y: 0 })).toBe(false);
+  });
+  it('merges stacked silhouette rows into fewer collision boxes', () => {
+    const mask = new Uint8Array(64 * 64);
+    for (let y = 8; y < 40; y++) for (let x = 8; x < 40; x++) mask[y * 64 + x] = 1;
+    expect(silhouetteBoxes(mask, 64, 64, 4)).toHaveLength(1);
+  });
 });
