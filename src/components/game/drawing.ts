@@ -55,13 +55,15 @@ export async function decodeGameImages(images: GameImages) {
     const source = img.src;
     // Wait for an actual load (or error) before decoding, so a retry never aborts mid-fetch.
     const loaded = () => new Promise<void>(resolve => {
-      if (img.complete && img.naturalWidth > 0) return resolve();
-      img.addEventListener('load', () => resolve(), { once: true });
-      img.addEventListener('error', () => resolve(), { once: true });
+      if (img.complete) return resolve();
+      const timer = setTimeout(resolve, 15000);
+      const done = () => { clearTimeout(timer); resolve(); };
+      img.addEventListener('load', done, { once: true });
+      img.addEventListener('error', done, { once: true });
     });
     for (let attempt = 0; attempt < 2; attempt++) {
       await loaded();
-      try { if (img.naturalWidth > 0) { await img.decode(); return; } } catch { /* retry below */ }
+      try { await img.decode(); return; } catch { /* retry below */ }
       if (img.complete && img.naturalWidth > 0) return;
       if (!attempt) img.src = source + (source.includes('?') ? '&' : '?') + 'retry=1';
     }
