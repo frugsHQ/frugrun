@@ -9,25 +9,25 @@ export const JUMP_VEL = -0.85;
 
 // ── Endless-mode difficulty ramp config ────────────────────
 export const DIFFICULTY = {
-  startSpeed: 0.28,
-  startMinSpawn: 1000,
-  startMaxSpawn: 1900,
-  maxSpeed: 0.60,
-  minMinSpawn: 350,
-  minMaxSpawn: 700,
-  speedRamp: 0.000015,
-  spawnRamp: 0.008,
-  capTime: 150_000,
+  startSpeed: 0.34, // was 0.28 — higher base so early game feels less "slow then surge"
+  startMinSpawn: 1100,
+  startMaxSpawn: 2000,
+  maxSpeed: 0.58, // slightly lower peak so the ramp is gentler
+  minMinSpawn: 400,
+  minMaxSpawn: 750,
+  speedRamp: 0.000012,
+  spawnRamp: 0.007,
+  capTime: 180_000, // longer ramp so speed increases more gradually
 } as const;
 
 // ── Obstacle types ─────────────────────────────────────────
 export type ObstacleKind = "spikes" | "totem";
 
 // ── Coins & lives ──────────────────────────────────────────
-export const COIN_POINTS = 10;      // each coin adds 10 points
+export const COIN_POINTS = 10; // each coin adds 10 points
 export const COIN_SIZE_RATIO = 0.42; // coin size relative to frog width
 export const START_LIVES = 3;
-export const HIT_INVULN_MS = 1200;   // grace time after losing a heart
+export const HIT_INVULN_MS = 2000; // grace time after losing a heart (was 1200)
 
 // ── Scoring config ─────────────────────────────────────────
 export const SCORING = {
