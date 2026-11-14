@@ -7,3 +7,5 @@
 - Pre-render complete mirrored strips into synchronous canvas compositor layers on resize; translate them without per-frame scaling and keep letterbox fills static, avoiding asynchronous image decoding and unpainted strip gaps.
 - Integrate the existing difficulty curve in one scroll module and share leftover-step interpolation and coverage calculations with tests, so cadence and quality rebuilds cannot alter world movement.
 - Keep frame accumulation, resolution limits, adaptive quality and rolling measurements in the performance module; quality changes must never alter simulation tuning or world motion.
+- Commit queued canvas/scenery resizes at the beginning of the single game RAF, before painting; resizing after a draw erases the visible character for a frame.
+- Share distance-driven run phase and elapsed-time pose easing in the animation module, and release gameplay effects on menu entry; previews must never inherit damage blinking or pickup popups.

@@ -1,3 +1,9 @@
+# Focused animation repair
+- [x] Measure world movement and run-frame cadence separately: 60-second baseline steady; remove display-rate-dependent pose easing and post-draw clearing, without retuning speed
+- [x] Queue all scene resizes before drawing; prevent preview damage hiding and release pooled effects on menu entry
+- [x] Verify 61-second fresh/returned desktop and phone previews, real rounds/jumps/damage/replay, landscape, simulated blur/visibility return, and 30/60/120/144Hz timing tests; 39 tests pass
+- [ ] Confirm the reported multi-second speed illusion on the user's physical PC: sandbox movement is steady; native tab visibility and physical high-refresh displays are unavailable here
+
 # Current regression fixes
 - [x] Decode/retry assets, synchronous scene layers, visibility/size/DPR rebuilds and fallback; preview verified
 - [x] Mirrored full-width coverage and D coverage diagnostics, including physical tile side margins

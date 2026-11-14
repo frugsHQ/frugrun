@@ -1,5 +1,6 @@
 import { accumulateFrame, bufferDpr, PerformanceMeter } from "./game/performance";
 import { worldDistance, interpolate, layerCoverage } from './game/scroll';
+import { runCycle, poseBlend, isPreview, damageHidden, clearTransientEffects } from './game/animation';
 import { startRun } from "./game/leaderboard";
 import { useRef, useEffect, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -27,9 +28,6 @@ import {
 import { playSfxJump, playSfxScore, playSfxGameOver, playSfxCoin, playSfxHit } from "./game/sfx";
 import { StartOverlay, GameOverOverlay, LeaderboardOverlay } from "./game/overlays";
 
-// Run-cycle timing: each of the 4 frames shows for this long (ms)
-const RUN_FRAME_MS = TUNING.runStride; // logical distance per running cycle
-
 // ── Component ──────────────────────────────────────────────
 export default function FrogRunner() {
   const layerRefs = useRef<(HTMLCanvasElement | null)[]>([]);
@@ -45,7 +43,7 @@ export default function FrogRunner() {
   const lastReport = useRef("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgsRef = useRef<GameImages | null>(null);
-  const runFrameRef = useRef(0);
+  const resizePending = useRef(true);
   const hitObstacles = useRef(new WeakSet<Obstacle>());
   const lastDrawn = useRef<{ pose: Pose; obstacles: Map<Obstacle, number>; polygons: Point[][] } | null>(null);
   const dustRef = useRef<DustParticle[]>([]);
@@ -106,8 +104,6 @@ export default function FrogRunner() {
     survivalAccum: 0,
     spawnTimer: 0,
     nextSpawn: DIFFICULTY.startMaxSpawn as number,
-    lastTime: 0,
-    animId: 0,
     canvasW: 0,
     canvasH: 0,
     bgOffset: 0,
@@ -134,7 +130,9 @@ export default function FrogRunner() {
   }, []);
 
   // ── Resize canvas (sharp on high-DPI screens) ──
-  const resize = useCallback(() => {
+  // Resizes clear canvas contents. Commit them before drawing, never after it.
+  const resize = useCallback(() => { resizePending.current = true; }, []);
+  const applyResize = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const container = tileRef.current;
@@ -201,7 +199,7 @@ export default function FrogRunner() {
   }
 
   // ── Draw the whole scene (used by both gameplay and the idle menu) ──
-  const drawScene = useCallback((ctx: CanvasRenderingContext2D, alpha: number) => {
+  const drawScene = useCallback((ctx: CanvasRenderingContext2D, alpha: number, renderMs: number) => {
     const s = stateRef.current;
     const imgs = imgsRef.current;
     if (!imgs) return;
@@ -210,6 +208,7 @@ export default function FrogRunner() {
     const pixel = (n: number) => Math.round(n * view.current.scale * view.current.dpr) / (view.current.scale * view.current.dpr);
     const frogY = previous.current.frogY + (s.frogY - previous.current.frogY) * alpha;
     const groundOffset = interpolate(previous.current.ground, s.groundOffset, alpha);
+    const cycle = runCycle(groundOffset, imgs.run.length);
 
 
     for (const ob of s.obstacles) drawObstacle(ctx, imgs, pixel((ob.previousX ?? ob.x) + (ob.x - (ob.previousX ?? ob.x)) * alpha), groundY, ob.w, ob.h, ob.kind);
@@ -232,8 +231,7 @@ export default function FrogRunner() {
     // ── Pick sprite frame: run cycle on ground, jump/fall poses in air ──
     let frame: HTMLImageElement | HTMLCanvasElement;
     if (s.onGround) {
-      runFrameRef.current = Math.floor((groundOffset % RUN_FRAME_MS) / RUN_FRAME_MS * imgs.run.length);
-      frame = imgs.run[runFrameRef.current];
+      frame = imgs.run[cycle.frame];
     } else {
       frame = s.frogVY < 0 ? imgs.jump : imgs.fall;
     }
@@ -249,11 +247,12 @@ export default function FrogRunner() {
       sx = 1 + 0.08 * t; sy = 1 - 0.07 * t;
     } else {
       // Tiny running bob
-      sy = 1 + Math.sin(groundOffset / RUN_FRAME_MS * Math.PI * 4) * 0.012;
-      rot = Math.sin(groundOffset / RUN_FRAME_MS * Math.PI * 2) * 0.012;
+      sy = 1 + Math.sin(cycle.phase * 2) * 0.012;
+      rot = Math.sin(cycle.phase) * 0.012;
     }
     // Ease tilt and squash so takeoff/landing never snap between poses.
-    smooth.sx += (sx - smooth.sx) * 0.3; smooth.sy += (sy - smooth.sy) * 0.3; smooth.rot += (rot - smooth.rot) * 0.2;
+    const scaleBlend = poseBlend(0.3, renderMs), rotationBlend = poseBlend(0.2, renderMs);
+    smooth.sx += (sx - smooth.sx) * scaleBlend; smooth.sy += (sy - smooth.sy) * scaleBlend; smooth.rot += (rot - smooth.rot) * rotationBlend;
     sx = smooth.sx; sy = smooth.sy; rot = smooth.rot;
     const pose: Pose = { x: pixel(frogX + frogW / 2), y: frogY + frogH, scaleX: frogW / 420 * sx, scaleY: frogH / 420 * sy, rotation: rot };
     const polygons = (spriteInfo.get(frame)?.boxes ?? []).map(box => transformBox(box, pose));
@@ -304,9 +303,9 @@ export default function FrogRunner() {
       const popup = popups.current.find(p => p.life <= 0); if (popup) { popup.x = x; popup.y = coin.y; popup.life = 500; }
       for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; particle(sparkleRef.current, { x, y: coin.y, vx: Math.cos(a) * 0.12, vy: Math.sin(a) * 0.12, life: 350, maxLife: 350, size: 2 + Math.random() * 2 }); }
     }
-    const blinkHidden = s.invuln > 0 && Math.floor(s.invuln / 90) % 2 === 0;
+    const blinkHidden = damageHidden(s.gameState, s.invuln);
     if (!blinkHidden) {
-      if (imageReady(frame)) drawFrug(ctx, frame, pose, groundOffset / RUN_FRAME_MS * Math.PI * 2, getDifficulty(s.elapsed).speed, s.frogVY);
+      if (imageReady(frame)) drawFrug(ctx, frame, pose, cycle.phase, isPreview(s.gameState) ? DIFFICULTY.startSpeed : getDifficulty(s.elapsed).speed, s.frogVY);
       else drawFrogFallback(ctx, frogX, frogY, frogW, frogH);
     }
 
@@ -519,6 +518,7 @@ export default function FrogRunner() {
     if (!ready) return;
     let id = 0;
     const tick = (time: number) => {
+      if (resizePending.current) { resizePending.current = false; applyResize(); }
       const canvas = canvasRef.current; const ctx = canvas?.getContext('2d', { alpha: true });
       if (!ctx || !canvas) { id = requestAnimationFrame(tick); return; }
       const c = clock.current;
@@ -534,7 +534,7 @@ export default function FrogRunner() {
         if (left !== old) setCountdown(left || null);
         if (!left) { pausedRef.current = false; setPaused(false); c.accumulator = 0; }
       }
-      if (!pausedRef.current) {
+      if (!pausedRef.current && !document.hidden) {
         const advance = accumulateFrame(c.accumulator, dt); steps = advance.steps; c.accumulator = advance.remainder;
         for (let i = 0; i < steps; i++) {
           simulate(TUNING.stepMs);
@@ -565,7 +565,7 @@ export default function FrogRunner() {
       ctx.save(); ctx.beginPath(); ctx.rect(0, 0, view.current.width, view.current.height); ctx.clip();
       if (shakeRef.current > 0 && !pausedRef.current) { shakeRef.current = Math.max(0, shakeRef.current - dt); const amplitude = shakeRef.current / 300 * 7;
         ctx.translate(Math.sin(time * 0.12) * amplitude, Math.cos(time * 0.15) * amplitude); }
-      drawScene(ctx, pausedRef.current ? 1 : c.accumulator / TUNING.stepMs);
+      drawScene(ctx, alpha, pausedRef.current || document.hidden || dt > 250 ? 0 : dt);
       if (stateRef.current.gameState === 'dying') { ctx.globalAlpha = stateRef.current.deathTimer / TUNING.deathMs * 0.22; ctx.fillStyle = canvasColors.current.coin; ctx.fillRect(0, 0, view.current.width, view.current.height); }
       ctx.restore();
       const renderMs = performance.now() - renderStart; const domStart = performance.now();
@@ -599,7 +599,7 @@ ${coverage.current}${coverageGap.current ? '\nWARNING: uncovered stage' : ''}`;
       id = requestAnimationFrame(tick);
     };
     id = requestAnimationFrame(tick); return () => cancelAnimationFrame(id);
-  }, [ready, simulate, drawScene, resize]);
+  }, [ready, simulate, drawScene, resize, applyResize]);
 
   // ── Start / restart ──
   const startGame = useCallback(() => {
@@ -620,22 +620,31 @@ ${coverage.current}${coverageGap.current ? '\nWARNING: uncovered stage' : ''}`;
     triggeredMilestonesRef.current = new Set();
     s.elapsed = 0; s.spawnTimer = 0;
     s.nextSpawn = DIFFICULTY.startMaxSpawn;
-    s.lastTime = 0; previous.current.frogY = s.frogY; previous.current.ground = s.groundOffset; previous.current.elapsed = 0; measurement.current.active = false;
-    for (const p of particlePool.current) p.life = 0;
-    for (const p of popups.current) p.life = 0;
+    previous.current.frogY = s.frogY; previous.current.ground = s.groundOffset; previous.current.elapsed = 0; measurement.current.active = false;
+    clearTransientEffects(particlePool.current, popups.current);
+    poseSmooth.current = { sx: 1, sy: 1, rot: 0 };
+    clock.current.accumulator = 0; clock.current.last = 0;
     input.current.held = false; input.current.buffer = 0;
     setLives(START_LIVES);
     setOverlay("playing");
-
-    cancelAnimationFrame(s.animId);
 
   }, [ready]);
 
   const goToMenu = useCallback(() => {
     const s = stateRef.current;
-    cancelAnimationFrame(s.animId);
     s.gameState = "start";
     s.obstacles = []; s.coinList = [];
+    s.invuln = 0; s.deathTimer = 0; s.squashTimer = 0; s.frogVY = 0;
+    s.onGround = true; s.frogY = geom().restY;
+    previous.current.frogY = s.frogY; previous.current.ground = s.groundOffset;
+    dustRef.current = []; sparkleRef.current = []; milestoneRef.current = null;
+    clearTransientEffects(particlePool.current, popups.current);
+    shakeRef.current = 0; lastDrawn.current = null;
+    poseSmooth.current = { sx: 1, sy: 1, rot: 0 };
+    input.current = { held: false, heldMs: 0, buffer: 0, coyote: 0 };
+    pausedRef.current = false; setPaused(false);
+    countdownRemaining.current = 0; setCountdown(null);
+    clock.current.accumulator = 0; clock.current.last = 0; measurement.current.active = false;
     setOverlay("start");
   }, []);
 
@@ -674,7 +683,7 @@ ${coverage.current}${coverageGap.current ? '\nWARNING: uncovered stage' : ''}`;
       if (e.code === 'Enter' && stateRef.current.gameState === 'over') { e.preventDefault(); startGame(); }
     };
     const keyup = (e: KeyboardEvent) => { if (['Space', 'ArrowUp', 'KeyW'].includes(e.code) && !editable(e.target)) { e.preventDefault(); release(); } };
-    const hidden = () => { if (document.hidden) pauseGame(); else resize(); };
+    const hidden = () => { clock.current.last = 0; clock.current.accumulator = 0; measurement.current.active = false; if (document.hidden) pauseGame(); else resize(); };
     // DPR can change without a ResizeObserver notification (moving between monitors).
     let dprQuery = matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
     const dprChanged = () => { resize(); dprQuery.removeEventListener('change', dprChanged); dprQuery = matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`); dprQuery.addEventListener('change', dprChanged); };
